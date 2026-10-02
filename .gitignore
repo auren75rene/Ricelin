@@ -72,3 +72,4 @@ docs/
 __pycache__/
 configs/hypr/hyprsunset.conf
 .impeccable/
+.aider*
