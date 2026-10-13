@@ -15,6 +15,15 @@ jobs:
         run: sh tools/lint-init-calls.sh
       - name: QML singleton registration self-check
         run: sh tests/test_qml_singletons.sh
+      - name: Install Quickshell for headless runtime smoke
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y software-properties-common
+          sudo add-apt-repository -y ppa:avengemedia/danklinux
+          sudo apt-get update
+          sudo apt-get install -y quickshell
+      - name: Quickshell runtime integration smoke
+        run: sh tests/test_qml_runtime.sh
       - name: ricelin-sys self-check
         run: sh tests/test_ricelin_sys.sh
       - name: qs-toggle self-check
@@ -38,6 +47,7 @@ jobs:
           sh -n configs/hypr/scripts/ricelin-prefix
           sh -n tests/test_ricelin_prefix.sh
           sh -n tests/test_qml_singletons.sh
+          sh -n tests/test_qml_runtime.sh
           sh -n tools/lint-init-calls.sh
           sh -n tests/test_ricelin_sys.sh
           sh -n configs/hypr/scripts/qs-toggle.sh
