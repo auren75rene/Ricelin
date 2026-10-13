@@ -12,12 +12,12 @@ function shouldKeepScreenCamera(screenCameraMode, screenRecording) {
     return !!screenCameraMode && !!screenRecording
 }
 
-/** A camera cannot be deactivated until pending photo/video output is finalized. */
-function shouldDeferCameraStop(videoRecording, capturingPhoto) {
-    return !!videoRecording || !!capturingPhoto
+/** A camera cannot be deactivated while capture is starting or output is being finalized. */
+function shouldDeferCameraStop(videoRecording, capturingPhoto, startingVideo) {
+    return !!videoRecording || !!capturingPhoto || !!startingVideo
 }
 
 /** Close only after a requested stop is pending and all capture work is finished. */
-function shouldFinishPendingCameraStop(stopPending, videoRecording, capturingPhoto) {
-    return !!stopPending && !videoRecording && !capturingPhoto
+function shouldFinishPendingCameraStop(stopPending, videoRecording, capturingPhoto, startingVideo) {
+    return !!stopPending && !videoRecording && !capturingPhoto && !startingVideo
 }
