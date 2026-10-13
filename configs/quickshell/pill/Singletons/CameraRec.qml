@@ -15,7 +15,9 @@ Singleton {
 
     property bool cameraActive: false
     property bool videoRecording: false
+    property bool startingVideo: false
     property bool capturingPhoto: false
+    property bool cameraStopPending: false
     property string currentFile: ""
 
     // -----------------------------------------------------------------
@@ -97,7 +99,7 @@ Singleton {
         mediaDevices.audioInputs.length > 0
 
     readonly property bool recordingLocked:
-        videoRecording || capturingPhoto
+        videoRecording || startingVideo || capturingPhoto
 
     readonly property bool hasFocusModes:
         availableFocusModes.length > 0
@@ -228,6 +230,15 @@ Singleton {
         onRecorderStateChanged: {
             root.videoRecording =
                 recorder.recorderState === MediaRecorder.RecordingState
+
+            if (root.videoRecording) {
+                root.startingVideo = false
+                if (root.cameraStopPending)
+                    root.stopVideo()
+            } else {
+                root.startingVideo = false
+                root.finishPendingCameraStop()
+            }
         }
 
         onActualLocationChanged: {
@@ -236,7 +247,9 @@ Singleton {
         }
 
         onErrorOccurred: function(error, errorString) {
+            root.startingVideo = false
             console.error("Camera video error:", errorString)
+            root.finishPendingCameraStop()
         }
     }
 
@@ -264,17 +277,31 @@ Singleton {
         property string pendingFile: ""
 
         onExited: function(exitCode) {
+            var action = pendingAction
+            var file = pendingFile
+            pendingAction = ""
+            pendingFile = ""
+
             if (exitCode !== 0) {
                 root.capturingPhoto = false
+                root.startingVideo = false
                 console.error("Could not create camera directory")
+                root.finishPendingCameraStop()
                 return
             }
 
-            if (pendingAction === "photo") {
-                imageCapture.captureToFile(pendingFile)
-            } else if (pendingAction === "video") {
+            if (action === "photo") {
+                imageCapture.captureToFile(file)
+            } else if (action === "video") {
+                // Closing the UI while mkdir is in flight cancels the pending
+                // start instead of starting a recording against a closed camera.
+                if (root.cameraStopPending || !root.cameraActive) {
+                    root.startingVideo = false
+                    root.finishPendingCameraStop()
+                    return
+                }
                 root.applyCodec()
-                recorder.outputLocation = "file://" + pendingFile
+                recorder.outputLocation = "file://" + file
                 recorder.record()
             }
         }
@@ -1220,6 +1247,10 @@ Singleton {
         if (!cameraAvailable)
             return
 
+        // A rapid reopen cancels a deferred close while an existing capture
+        // finishes; it must not later close the camera underneath the UI.
+        cameraStopPending = false
+
         if (cameraActive)
             return
 
@@ -1229,12 +1260,27 @@ Singleton {
     }
 
     function stopCamera() {
-        if (videoRecording)
-            stopVideo()
-
         // Do not let a debounced write from the previous camera session run
         // after the camera is closed and then quickly reopened.
         manualControlTimer.stop()
+
+        if (CameraDevices.shouldDeferCameraStop(videoRecording, capturingPhoto, startingVideo)) {
+            cameraStopPending = true
+            if (videoRecording)
+                stopVideo()
+            return
+        }
+
+        cameraStopPending = false
+        cameraActive = false
+    }
+
+    function finishPendingCameraStop() {
+        if (!CameraDevices.shouldFinishPendingCameraStop(
+                cameraStopPending, videoRecording, capturingPhoto, startingVideo))
+            return
+
+        cameraStopPending = false
         cameraActive = false
     }
 
@@ -1258,7 +1304,7 @@ Singleton {
     }
 
     function startVideo() {
-        if (!cameraActive || videoRecording)
+        if (!cameraActive || videoRecording || startingVideo || capturingPhoto)
             return
 
         var file =
@@ -1268,6 +1314,7 @@ Singleton {
             ".mp4"
 
         currentFile = file
+        startingVideo = true
         ensureDir("video", file)
     }
 
@@ -1289,6 +1336,10 @@ Singleton {
             Qt.callLater(root.scheduleFormatRefresh)
         }
     }
+
+    onVideoRecordingChanged: root.finishPendingCameraStop()
+    onCapturingPhotoChanged: root.finishPendingCameraStop()
+    onStartingVideoChanged: root.finishPendingCameraStop()
 
     onSelectedResolutionChanged: {
         if (selectedResolution.length > 0)
