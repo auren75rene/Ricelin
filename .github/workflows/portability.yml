@@ -21,9 +21,17 @@ jobs:
         run: |
           node tests/test_blades.js
           node tests/test_dock.js
+      - name: prefix manager safety self-check
+        run: sh tests/test_ricelin_prefix.sh
+      - name: application registry parser self-check
+        run: node tests/test_app_registry_store.js
+      - name: Deployment installer self-check
+        run: python3 installer/deploy.py
       - name: Shell syntax
         run: |
           sh -n configs/hypr/scripts/ricelin-sys
+          sh -n configs/hypr/scripts/ricelin-prefix
+          sh -n tests/test_ricelin_prefix.sh
           sh -n tools/lint-init-calls.sh
           sh -n tests/test_ricelin_sys.sh
           sh -n configs/hypr/scripts/qs-toggle.sh

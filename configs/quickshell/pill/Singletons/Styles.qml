@@ -72,7 +72,7 @@ Singleton {
 
     Process {
         id: actProc
-        onExited: {
+        onExited: { // qmllint disable signal-handler-parameters
             root.busy = false;
             // A new instance takes a moment to show up as running.
             settle.restart();

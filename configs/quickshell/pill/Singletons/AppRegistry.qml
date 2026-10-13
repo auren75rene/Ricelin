@@ -2,6 +2,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import "AppRegistryStore.js" as RegistryStore
 
 /**
  * Application Registry: the single source of truth for every non-native app
@@ -27,8 +28,10 @@ Singleton {
     property bool ready: false
     property var apps: []
     property string loadError: ""
-    property bool backupPending: false
-    readonly property string backupPath: root.path + ".broken-" + Date.now()
+    property bool recovering: false
+    property bool recoveryWritePending: false
+    property string recoveryBackupPath: ""
+    property string recoveryStatus: ""
 
     readonly property string dir: (Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config")) + "/ricelin"
     readonly property string path: root.dir + "/applications.json"
@@ -170,6 +173,10 @@ Singleton {
 
     /** Merges `partial` over template(), assigns a fresh unique id, appends and persists. Returns the stored record. */
     function add(partial) {
+        if (!root.ready || root.loadError) {
+            console.warn("AppRegistry: refusing to add an app while the registry is unavailable.");
+            return null;
+        }
         var rec = root.normalizeRecord(partial || {});
         rec.id = root.uniqueId(root.slugify(rec.name || rec.executable || "app"));
         rec.createdAt = Date.now();
@@ -179,11 +186,13 @@ Singleton {
     }
 
     function update(id, patch) {
+        if (!root.ready || root.loadError) return;
         root.apps = root.apps.map(a => a.id === id ? root.normalizeRecord(Object.assign({}, a, patch || {})) : a);
         root.persist();
     }
 
     function remove(id) {
+        if (!root.ready || root.loadError) return;
         root.apps = root.apps.filter(a => a.id !== id);
         root.persist();
     }
@@ -207,42 +216,50 @@ Singleton {
     }
 
     function persist() {
-        if (!root.ready)
+        if (!root.ready
+                || (root.loadError && !root.recoveryWritePending)
+                || (root.recovering && !root.recoveryWritePending))
             return;
         store.setText(JSON.stringify(root.apps, null, 2));
     }
 
     /** Receives the raw text of an unparsable store; written from memory, so nothing races the replacement file. */
-    FileView {
-        id: brokenStore
-        path: root.backupPath
-        atomicWrites: true
-        printErrors: false
-
-        onSaved: {
-            if (!root.backupPending)
-                return;
-            root.backupPending = false;
-            root.loadError = "";
-            console.warn("AppRegistry: unreadable registry backed up to", root.backupPath);
-            root.ready = true;
-            root.seedDefaults();
-        }
-        onSaveFailed: function(error) {
-            if (!root.backupPending)
-                return;
-            root.backupPending = false;
-            root.loadError = "Could not back up applications.json. The original file was left untouched.";
-            console.warn("AppRegistry: backup failed; refusing to replace applications.json:", error);
-        }
-    }
 
     FileView {
         id: store
         path: root.path
+        // Do not open applications.json until storeProbe has verified that it is
+        // a regular, non-symlink file. This also avoids opening a FIFO on startup.
+        preload: false
         blockLoading: true
         atomicWrites: true
         printErrors: false
+        onSaved: {
+            if (root.recoveryWritePending) {
+                root.recoveryWritePending = false;
+                root.recovering = false;
+                root.loadError = "";
+                root.ready = true;
+                root.recoveryStatus = "Original registry backed up to " + root.recoveryBackupPath
+                    + ". Defaults were written; the original file contents remain in that backup.";
+            } else if (root.recoveryStatus.indexOf("Could not save applications.json:") === 0) {
+                root.recoveryStatus = "";
+            }
+        }
+        onSaveFailed: function(error) {
+            if (!root.recoveryWritePending) {
+                root.recoveryStatus = "Could not save applications.json: " + String(error);
+                console.warn("AppRegistry: could not save applications.json:", error);
+                return;
+            }
+            root.recoveryWritePending = false;
+            root.recovering = false;
+            root.apps = [];
+            root.loadError = "The registry backup exists, but writing defaults failed: " + String(error);
+            root.recoveryStatus = "Original registry is backed up at " + root.recoveryBackupPath
+                + ", but writing defaults failed. The backup retains the original file contents.";
+            console.warn("AppRegistry: defaults could not be written after recovery backup:", error);
+        }
     }
 
     /**
@@ -254,33 +271,113 @@ Singleton {
     Process {
         id: mkdirProc
         command: ["mkdir", "-p", root.dir]
-        onExited: root.loadOrSeed()
+        onExited: function(exitCode) { // qmllint disable signal-handler-parameters
+            if (exitCode !== 0) {
+                root.finishLoadError("Could not create the registry directory: " + root.dir);
+                return;
+            }
+            storeProbe.running = true;
+        }
     }
 
-    function loadOrSeed() {
+    // Exit 0 means a regular file exists, exit 1 means it is definitely absent
+    // and the parent is accessible, and exit 2 means unsafe/unknown. Only exit 1
+    // may seed defaults; directories, special files and symlinks are never read.
+    Process {
+        id: storeProbe
+        command: ["sh", "-c",
+            "if [ -L \"$1\" ]; then exit 2; fi; "
+            + "if [ -f \"$1\" ]; then exit 0; fi; "
+            + "if [ -e \"$1\" ]; then exit 2; fi; "
+            + "if [ -d \"$2\" ] && [ -r \"$2\" ] && [ -w \"$2\" ] && [ -x \"$2\" ]; then exit 1; fi; "
+            + "exit 2", "_", root.path, root.dir]
+        onExited: function(exitCode) { // qmllint disable signal-handler-parameters
+            root.loadOrSeed(exitCode);
+        }
+    }
+
+    Process {
+        id: backupProc
+        command: ["true"]
+        running: false
+        onExited: function(exitCode) { // qmllint disable signal-handler-parameters
+            if (exitCode !== 0) {
+                root.recovering = false;
+                root.recoveryBackupPath = "";
+                root.recoveryStatus = "Backup failed; the original registry was not changed.";
+                console.warn("AppRegistry: backup failed; refusing default recovery.");
+                return;
+            }
+            // Keep the registry locked until FileView confirms the defaults were saved.
+            root.ready = true;
+            root.recoveryWritePending = true;
+            root.seedDefaults();
+        }
+    }
+
+    function finishLoadError(reason) {
+        root.apps = [];
+        root.loadError = String(reason);
+        root.ready = true; // loading has finished, but mutations/persistence remain disabled
+        root.recoveryStatus = "";
+        root.recoveryWritePending = false;
+        console.warn("AppRegistry: " + root.loadError + ". Existing applications.json was not overwritten.");
+    }
+
+    function loadOrSeed(pathState) {
+        if (pathState === 1) {
+            root.loadError = "";
+            root.ready = true;
+            root.seedDefaults();
+            return;
+        }
+        if (pathState !== 0) {
+            root.finishLoadError("applications.json is not a regular non-symlink file, or its path state could not safely be determined.");
+            return;
+        }
+
         var raw = "";
         try {
             raw = store.text();
         } catch (e) {
-            raw = "";
+            root.finishLoadError("Could not read applications.json: " + String(e));
+            return;
         }
-        if (raw && raw.length > 0) {
-            try {
-                root.apps = JSON.parse(raw).map(a => root.normalizeRecord(a));
-                root.ready = true;
-                return;
-            } catch (e) {
-                // A hand-edit with a stray comma must never cost the whole list:
-                // keep the unreadable file aside before the empty list replaces it.
-                root.loadError = "Invalid applications.json; preserving the original while creating a backup.";
-                root.backupPending = true;
-                brokenStore.setText(raw);
-                return;
-            }
+        if (!store.loaded) {
+            root.finishLoadError("The existing applications.json could not be loaded; its contents were preserved.");
+            return;
         }
+
+        var records;
+        try {
+            records = RegistryStore.parse(raw);
+        } catch (e) {
+            root.finishLoadError("applications.json is invalid: " + String(e));
+            return;
+        }
+
+        root.apps = records.map(a => root.normalizeRecord(a));
         root.loadError = "";
         root.ready = true;
-        root.seedDefaults();
+    }
+
+    // This recovery path is deliberately explicit: it backs up the exact old
+    // file first and writes defaults only after that copy has succeeded.
+    function recoverWithDefaults() {
+        if (!root.loadError || root.recovering
+                || root.recoveryWritePending || !root.ready)
+            return false;
+        var backup = root.path + ".backup-" + Date.now();
+        root.recoveryBackupPath = backup;
+        root.recoveryStatus = "Backing up the existing registry before writing defaults…";
+        backupProc.command = ["sh", "-c",
+            "set -eu; if [ -L \"$1\" ]; then exit 5; fi; "
+            + "if [ -f \"$1\" ]; then "
+            + "[ ! -e \"$2\" ] && [ ! -L \"$2\" ] || exit 3; cp -p -- \"$1\" \"$2\"; "
+            + "else exit 4; fi", "_", root.path, backup];
+        root.recovering = true;
+        backupProc.running = true;
+        return true;
     }
 
     Component.onCompleted: mkdirProc.running = true

@@ -592,9 +592,15 @@ def _selftest():
         idletxt = (root / "hypr" / "hypridle.conf").read_text()
         check(str(Path.home()) + "/.config/hypr/scripts/lock.sh" in idletxt,
               "hypridle lock_cmd points at the real home")
-        ghttxt = (root / "hypr" / "ghosttype.lua").read_text()
-        check(str(Path.home()) + "/Applications/GhostType.AppImage" in ghttxt,
-              "ghosttype.lua AppImage path points at the real home")
+        ghosttype_source = CONFIGS / "hypr" / "ghosttype.lua"
+        ghosttype_dest = root / "hypr" / "ghosttype.lua"
+        if ghosttype_source.is_file():
+            ghttxt = ghosttype_dest.read_text()
+            check(str(Path.home()) + "/Applications/GhostType.AppImage" in ghttxt,
+                  "ghosttype.lua AppImage path points at the real home")
+        else:
+            check(not ghosttype_dest.exists(),
+                  "absent optional ghosttype.lua is not invented during deployment")
         fishtxt = (root / "fish" / "config.fish").read_text()
         check("cachyos-fish-config" not in fishtxt and "grok" not in fishtxt
               and "torii-greeting" in fishtxt,
