@@ -1367,7 +1367,7 @@ PillSurface {
                                     ? "tap to stop"
                                     : (root.cameraVideoMode
                                         ? "tap to record"
-                                        : "tap")))
+                                        : "tap"))))
                         : (ScreenRec.recording && !ScreenRec.canStop
                             ? "stop externally"
                             : (root.counting
