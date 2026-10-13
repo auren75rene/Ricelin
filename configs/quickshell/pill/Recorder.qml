@@ -1337,7 +1337,7 @@ PillSurface {
                                 ? "Take photo"
                                 : "Start video"))
                         : (ScreenRec.recording
-                            ? "Stop recording"
+                            ? (ScreenRec.canStop ? "Stop recording" : "External recording")
                             : (root.counting
                                 ? "Starting…"
                                 : "Start recording"))
@@ -1358,9 +1358,11 @@ PillSurface {
                             : (root.cameraVideoMode
                                 ? "tap to record"
                                 : "tap"))
-                        : (root.counting
-                            ? "tap to cancel"
-                            : "tap")
+                        : (ScreenRec.recording && !ScreenRec.canStop
+                            ? "stop externally"
+                            : (root.counting
+                                ? "tap to cancel"
+                                : "tap"))
                     color: Theme.faint
                     font.family: Theme.font
                     font.pixelSize: 10 * root.s
