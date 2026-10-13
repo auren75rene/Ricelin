@@ -13,6 +13,7 @@ PillSurface {
     property string category: "game"
     property string viewState: "list"
     property string selectedId: ""
+    property string restartTargetId: ""
     readonly property var selectedApp: AppRegistry.byId(root.selectedId)
 
     onOpenChanged: if (!open) { root.viewState = "list"; root.selectedId = ""; }
@@ -228,8 +229,11 @@ PillSurface {
            onForceStop: AppLauncher.forceStop(root.selectedId)
 
            onRestart: {
-               AppLauncher.stop(root.selectedId)
-               restartTimer.start()
+               root.restartTargetId = root.selectedId;
+               if (!root.restartTargetId)
+                   return;
+               AppLauncher.stop(root.restartTargetId);
+               restartTimer.restart();
            }
 
            onToggleFullscreen: AppRegistry.update(root.selectedId, {
@@ -240,8 +244,18 @@ PillSurface {
 
            Timer {
                id: restartTimer
-               interval: 900
-               onTriggered: AppLauncher.launch(root.selectedId)
+               interval: 250
+               onTriggered: {
+                   var id = root.restartTargetId;
+                   if (!id)
+                       return;
+                   if (AppLauncher.isRunning(id)) {
+                       restartTimer.restart();
+                       return;
+                   }
+                   root.restartTargetId = "";
+                   AppLauncher.launch(id);
+               }
            }
        }
        AppEditor {

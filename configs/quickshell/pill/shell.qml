@@ -253,6 +253,7 @@ ShellRoot {
 
         BladeLayer {
             modelData: modelData
+            visible: !root.captureHidden
         }
     }
 
