@@ -53,8 +53,8 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Install Quickshell and Git
-        run: pacman -Syu --noconfirm --needed git quickshell
+      - name: Install Quickshell, Qt Multimedia, and Git
+        run: pacman -Syu --noconfirm --needed git quickshell qt6-multimedia
       - uses: actions/checkout@v4
       - name: Run headless QML runtime smoke
         run: sh tests/test_qml_runtime.sh
