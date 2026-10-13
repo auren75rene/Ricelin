@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import "Singletons"
 import "lib/desktopentry.js" as DesktopImport
 
