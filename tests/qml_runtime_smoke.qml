@@ -68,6 +68,23 @@ ShellRoot {
             fail("CameraRec did not expose its CaptureSession and media objects")
             return
         }
+
+        // Load the screen-recorder singleton itself, but never start recording.
+        // This exercises the changed QML import/property path in a headless run.
+        if (typeof ScreenRec.start !== "function" ||
+            typeof ScreenRec.stop !== "function") {
+            fail("ScreenRec start/stop API is unavailable")
+            return
+        }
+        if (ScreenRec.recording || ScreenRec.canStop || ScreenRec.busy) {
+            fail("screen recorder should be idle at smoke-test startup")
+            return
+        }
+        ScreenRec.start("")
+        if (ScreenRec.busy) {
+            fail("screen recorder accepted an empty capture target")
+            return
+        }
     }
 
     Timer {
