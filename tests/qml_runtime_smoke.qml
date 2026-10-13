@@ -105,7 +105,7 @@ ShellRoot {
             var values = DesktopEntries.applications.values || []
             var entry = null
             for (var i = 0; i < values.length; ++i) {
-                if (values[i] && String(values[i].id || "") === "org.ricelin.runtime-smoke.desktop" && !values[i].noDisplay) {
+                if (values[i] && (String(values[i].id || "") === "org.ricelin.runtime-smoke" || String(values[i].id || "") === "org.ricelin.runtime-smoke.desktop") && !values[i].noDisplay) {
                     entry = values[i]
                     break
                 }
