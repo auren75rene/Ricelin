@@ -19,10 +19,11 @@ jobs:
         run: sh tests/test_qs_toggle.sh
       - name: ricelin-style self-check
         run: sh tests/test_ricelin_style.sh
-      - name: Blade and dock logic
+      - name: Blade, dock and desktop-entry logic
         run: |
           node tests/test_blades.js
           node tests/test_dock.js
+          node tests/test_desktopentry.js
       - name: prefix manager safety self-check
         run: sh tests/test_ricelin_prefix.sh
       - name: application registry parser self-check

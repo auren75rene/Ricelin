@@ -33,7 +33,9 @@ QtObject {
         var entries = DesktopEntries.applications.values || [];
         for (var i = 0; i < entries.length; ++i) {
             var e = entries[i];
-            if (e && !e.noDisplay && e.id && String(e.id) === String(app.id))
+            if (e && !e.noDisplay && e.id &&
+                    ((app.desktopEntryId && String(e.id) === String(app.desktopEntryId))
+                     || String(e.id) === String(app.id)))
                 return e;
         }
         var wanted = String(app.name || "").toLowerCase();
@@ -94,13 +96,7 @@ QtObject {
         root.launchingId = app.id;
         launchFeedback.restart();
 
-        if (app.desktopEntry) {
-            app.desktopEntry.execute();
-            if (AppRegistry.byId(app.id))
-                AppRegistry.recordLaunch(app.id);
-            return;
-        }
-        // Anything that needs a runner decision stays behind AppLauncher.
+        // The shared launcher owns command resolution and process tracking for all runners.
         AppLauncher.launch(app.id, false);
     }
 

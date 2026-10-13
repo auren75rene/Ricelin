@@ -4,6 +4,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import "Singletons"
+import "lib/desktopentry.js" as DesktopImport
 
 /**
  * "Add → Scan": discover applications from ~/Games, Steam, Lutris and
@@ -73,15 +74,12 @@ Item {
                n === "steam controller configs"
     }
 
-   function steamAppIdFromExec(exec) {
-       var s = String(exec || "")
-       var match = s.match(/steam\s+steam:\/\/rungameid\/([0-9]+)/i)
-       return match ? match[1] : ""
-   }
-
    function candidateKey(c) {
        if (c.steamAppId && String(c.steamAppId).length > 0)
            return "steam:" + String(c.steamAppId)
+
+       if (c.desktopEntryId && String(c.desktopEntryId).length > 0)
+           return "desktop:" + String(c.desktopEntryId).toLowerCase()
 
        if (c.executable && String(c.executable).length > 0)
            return "exec:" + String(c.executable).trim().toLowerCase()
@@ -200,31 +198,29 @@ Item {
                                 ? "engineering"
                                 : "utility"
 
-                   var desktopExec = e.execString || ""
-                   var desktopSteamAppId = root.steamAppIdFromExec(desktopExec)
-
-                   found.push({
-                       source: desktopSteamAppId ? "STEAM" : "DESKTOP",
-                       discoverySource: "DESKTOP",
-                       name: e.name || "",
-                       executable: desktopExec,
-                       prefix: "",
-                       category: cat,
-                       runner: desktopSteamAppId ? "steam" : "native",
-                       steamAppId: desktopSteamAppId
-                   })
+                   found.push(DesktopImport.fromEntry(e, cat))
                 }
 
                 var existingSteamIds =
                     AppRegistry.apps
                         .filter(a => a.runner === "steam")
-                        .map(a => String(a.steamAppId || ""))
+                        .map(a => String(a.steamAppId || ""));
+
+                var existingDesktopEntryIds =
+                    AppRegistry.apps
+                        .map(a => String(a.desktopEntryId || ""))
+                        .filter(id => id.length > 0);
 
 
                // First remove things already represented by the registry.
                var fresh = found.filter(c => {
                    if (c.name.length === 0)
                        return false
+
+                   if (c.desktopEntryId &&
+                       existingDesktopEntryIds.indexOf(String(c.desktopEntryId)) >= 0) {
+                       return false
+                   }
 
                    if (c.steamAppId &&
                        existingSteamIds.indexOf(String(c.steamAppId)) >= 0) {
@@ -826,9 +822,11 @@ Item {
                 category: c.category,
                 runner: c.runner,
                 executable: c.executable,
+                desktopEntryId: c.desktopEntryId || "",
+                args: Array.isArray(c.args) ? c.args : [],
                 prefix: c.prefix,
                 steamAppId: c.steamAppId || "",
-                workingDirectory: ""
+                workingDirectory: c.workingDirectory || ""
             })
 
             n++

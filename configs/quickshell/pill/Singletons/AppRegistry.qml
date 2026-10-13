@@ -61,6 +61,7 @@ Singleton {
             iconImage: "",
             runner: "wine",
             executable: "",
+            desktopEntryId: "",
             workingDirectory: "",
             prefix: "",
             umuId: "",
@@ -98,6 +99,7 @@ Singleton {
         rec.env = Object.assign({}, input && input.env ? input.env : {});
         rec.dllOverrides = Object.assign({}, input && input.dllOverrides ? input.dllOverrides : {});
         rec.args = Array.isArray(input && input.args) ? input.args.slice() : [];
+        rec.desktopEntryId = String(input && input.desktopEntryId ? input.desktopEntryId : "");
 
         var envInput = input && input.environment ? input.environment : {};
         rec.environment = {
