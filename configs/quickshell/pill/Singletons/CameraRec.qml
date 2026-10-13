@@ -117,6 +117,12 @@ Singleton {
     readonly property bool cameraAvailable:
         mediaDevices.videoInputs.length > 0
 
+    /** Resolve the selected Qt camera identifier to a Linux V4L2 node. */
+    function v4l2DevicePath() {
+        var deviceId = camera.cameraDevice ? String(camera.cameraDevice.id || "") : ""
+        return /^\/dev\/video[0-9]+$/.test(deviceId) ? deviceId : "/dev/video0"
+    }
+
     Timer {
         id: formatRefreshTimer
 
@@ -452,10 +458,12 @@ Singleton {
     }
 
     function rebuildZoom() {
-        availableZoom = []
+        var next = []
 
-        if (!hasZoom)
+        if (!hasZoom) {
+            availableZoom = next
             return
+        }
 
         var max = Number(camera.maximumZoomFactor)
         var candidates = [1.0, 1.25, 1.5, 2.0, 3.0, 4.0, 5.0, 6.0, 8.0]
@@ -464,16 +472,17 @@ Singleton {
             var z = candidates[i]
 
             if (z >= camera.minimumZoomFactor && z <= max + 0.0001) {
-                availableZoom.push({
+                next.push({
                     label: z.toFixed(2).replace(/0+$/, "").replace(/\.$/, "") + "×",
                     value: z
                 })
             }
         }
+        availableZoom = next
     }
 
     function rebuildFocusModes() {
-        availableFocusModes = []
+        var next = []
 
         var modes = [
             { label: "Auto", value: "auto", mode: Camera.FocusModeAuto },
@@ -489,15 +498,16 @@ Singleton {
 
             try {
                 if (camera.isFocusModeSupported(m.mode))
-                    availableFocusModes.push(m)
+                    next.push(m)
             } catch (e) {
                 console.error("Focus capability query failed:", e)
             }
         }
+        availableFocusModes = next
     }
 
     function rebuildWhiteBalances() {
-        availableWhiteBalances = []
+        var next = []
 
         var modes = [
             { label: "Auto", value: "auto", mode: Camera.WhiteBalanceAuto },
@@ -515,11 +525,12 @@ Singleton {
 
             try {
                 if (camera.isWhiteBalanceModeSupported(m.mode))
-                    availableWhiteBalances.push(m)
+                    next.push(m)
             } catch (e) {
                 console.error("White-balance capability query failed:", e)
             }
         }
+        availableWhiteBalances = next
     }
 
     function refreshCapabilities() {
@@ -1209,7 +1220,6 @@ Singleton {
         cameraActive = true
         exposureModeName = "auto"
         manualGain = 0
-        manualControlTimer.restart()
     }
 
     function stopCamera() {
@@ -1267,7 +1277,6 @@ Singleton {
         if (cameraActive) {
             exposureModeName = "auto"
             manualGain = 0
-            manualControlTimer.restart()
             Qt.callLater(root.scheduleFormatRefresh)
         }
     }
@@ -1313,13 +1322,13 @@ Singleton {
             if (root.exposureModeName === "auto") {
                 manualControlProc.command = [
                     "v4l2-ctl",
-                    "-d", "/dev/video0",
+                    "-d", root.v4l2DevicePath(),
                     "--set-ctrl=auto_exposure=3,gain=0"
                 ]
             } else {
                 manualControlProc.command = [
                     "v4l2-ctl",
-                    "-d", "/dev/video0",
+                    "-d", root.v4l2DevicePath(),
                     "--set-ctrl=auto_exposure=1,exposure_dynamic_framerate=0,exposure_time_absolute="
                         + root.manualExposureAbsolute
                         + ",gain=" + root.manualGain

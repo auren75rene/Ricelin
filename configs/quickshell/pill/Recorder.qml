@@ -246,13 +246,15 @@ PillSurface {
         ScreenRec.recorderOpen = active;
 
         if (!active) {
-            ScreenRec.cameraOverlayEnabled = false;
+            var keepScreenCamera = root.screenCameraMode && ScreenRec.recording;
 
             if (CameraRec.videoRecording)
                 CameraRec.stopVideo();
 
-            if (!root.screenCameraMode)
+            if (!keepScreenCamera) {
+                ScreenRec.cameraOverlayEnabled = false;
                 CameraRec.stopCamera();
+            }
         }
         if (active) {
             MediaRec.refresh();
@@ -266,7 +268,6 @@ PillSurface {
         } else {
             chooserOpen = false;
             screenChooserOpen = false;
-            CameraRec.stopCamera();
         }
     }
 
