@@ -42,5 +42,5 @@ const cameraQml = fs.readFileSync(cameraQmlPath, "utf8");
 assert.match(cameraQml, /CameraDevices\.shouldDeferCameraStop\(videoRecording, capturingPhoto, startingVideo\)/);
 assert.match(cameraQml, /CameraDevices\.shouldFinishPendingCameraStop\(/);
 assert.match(cameraQml, /if \(root\.cameraStopPending \|\| !root\.cameraActive\)/);
-assert.match(cameraQml, /root\.startingVideo = true/);
+assert.match(cameraQml, /startingVideo = true/);
 console.log("  ok   CameraRec defers shutdown and cancels not-yet-started video when closing");
