@@ -1287,6 +1287,7 @@ Singleton {
     function takePhoto() {
         if (!cameraActive ||
             capturingPhoto ||
+            startingVideo ||
             videoRecording)
             return
 
