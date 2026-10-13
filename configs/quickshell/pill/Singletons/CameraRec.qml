@@ -241,7 +241,7 @@ Singleton {
     }
 
     CaptureSession {
-        id: captureSession
+        id: captureSessionObject
 
         camera: camera
         imageCapture: imageCapture
@@ -249,7 +249,9 @@ Singleton {
         audioInput: audioInput
     }
 
-    readonly property var captureSession: captureSession
+    // Export the session object for Recorder.qml's VideoOutput binding. Keep
+    // the internal QML id distinct from the property name to avoid self-binding.
+    readonly property var captureSession: captureSessionObject
 
     // -----------------------------------------------------------------
     // Directory / capture process
