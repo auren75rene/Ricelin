@@ -208,7 +208,7 @@ Singleton {
      * the surface and the resolvers never stack a second pick on a busy backend.
      */
     readonly property bool picking: windowProc.running
-    readonly property bool busy: recording || recProc.running || picking
+    readonly property bool busy: recording || recProc.running || mkdirProc.running || picking || counting
 
     /**
      * Resolve a whole-screen target synchronously to a monitor connector name
@@ -272,7 +272,7 @@ Singleton {
      * directory exists, then launches gsr.
      */
     function start(captureToken) {
-        if (recording || recProc.running)
+        if (!RecorderProcess.canStart(recording, recProc.running, mkdirProc.running, captureToken))
             return;
         var file = outDir + "/recording_" + timestamp() + ".mp4";
         mkdirProc.command = ["mkdir", "-p", outDir];
@@ -396,9 +396,22 @@ Singleton {
         id: mkdirProc
         property string pendingToken: ""
         property string pendingFile: ""
-        onExited: {
+        onExited: function(exitCode) {
+            if (!RecorderProcess.directoryReady(exitCode)) {
+                var failedDirectory = root.outDir;
+                pendingToken = "";
+                pendingFile = "";
+                console.error("ScreenRec: could not create recording directory:", failedDirectory);
+                failProc.command = ["notify-send", "-a", "Ricelin", "-u", "critical",
+                    "Recording failed", "Could not create recording directory: " + failedDirectory];
+                failProc.running = true;
+                return;
+            }
+
             root.currentFile = pendingFile;
             recProc.command = root.buildArgs(pendingToken, pendingFile);
+            pendingToken = "";
+            pendingFile = "";
             recProc.running = true;
         }
     }
