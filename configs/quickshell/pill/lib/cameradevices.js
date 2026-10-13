@@ -11,3 +11,13 @@ function v4l2Path(deviceId) {
 function shouldKeepScreenCamera(screenCameraMode, screenRecording) {
     return !!screenCameraMode && !!screenRecording
 }
+
+/** A camera cannot be deactivated until pending photo/video output is finalized. */
+function shouldDeferCameraStop(videoRecording, capturingPhoto) {
+    return !!videoRecording || !!capturingPhoto
+}
+
+/** Close only after a requested stop is pending and all capture work is finished. */
+function shouldFinishPendingCameraStop(stopPending, videoRecording, capturingPhoto) {
+    return !!stopPending && !videoRecording && !capturingPhoto
+}
