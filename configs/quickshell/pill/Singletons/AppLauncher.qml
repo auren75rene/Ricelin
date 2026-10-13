@@ -32,6 +32,7 @@ Singleton {
 
     /** appId -> live Process, kept outside runningIds since UI never binds to the process object itself. */
     property var _procs: ({})
+    property var _stopRequested: ({})
     property int _runningGameCount: 0
 
     function isRunning(appId) {
@@ -141,8 +142,12 @@ Singleton {
     Component {
         id: procComponent
         Process {
+            id: processRoot
+            property string capturedStderr: ""
             stdout: StdioCollector {}
-            stderr: StdioCollector {}
+            stderr: StdioCollector {
+                onStreamFinished: processRoot.capturedStderr = this.text
+            }
         }
     }
 
@@ -165,6 +170,7 @@ Singleton {
             return;
 
         root._procs[appId] = proc;
+        root._stopRequested = Object.assign({}, root._stopRequested, { [appId]: false });
         root.runningIds = Object.assign({}, root.runningIds, {
             [appId]: { startedAt: Date.now(), pid: 0 }
         });
@@ -180,6 +186,24 @@ Singleton {
         pidTimer.createObject(root, { appId: appId, proc: proc });
 
         proc.exited.connect(function (exitCode, exitStatus) {
+            var launched = root.runningIds[appId];
+            var elapsedMs = launched ? Date.now() - launched.startedAt : 0;
+            var stopFlags = Object.assign({}, root._stopRequested);
+            var intentionallyStopped = stopFlags[appId] === true;
+            delete stopFlags[appId];
+            root._stopRequested = stopFlags;
+
+            if (exitCode !== 0 && !intentionallyStopped) {
+                var detail = String(proc.capturedStderr || "").trim();
+                if (detail.length === 0)
+                    detail = "Process exited with status " + exitCode + ".";
+                if (detail.length > 420)
+                    detail = detail.slice(0, 417) + "...";
+                console.warn("Ricelin: application exited with status", exitCode, app.name, detail);
+                if (elapsedMs < 5000)
+                    Quickshell.execDetached(["notify-send", "-u", "normal", "-a", "Ricelin", "Could not start " + app.name, detail]);
+            }
+
             delete root._procs[appId];
             var next = Object.assign({}, root.runningIds);
             delete next[appId];
@@ -216,8 +240,10 @@ Singleton {
     /** Graceful stop: SIGTERM to our tracked process (Process.running = false), giving Wine/UMU a chance to shut the game down cleanly. */
     function stop(appId) {
         var proc = root._procs[appId];
-        if (proc)
+        if (proc) {
+            root._stopRequested = Object.assign({}, root._stopRequested, { [appId]: true });
             proc.running = false;
+        }
     }
 
     /** Best-effort tree kill for a wedged process: matches the game's own executable path rather than the wine/umu-run wrapper, so the wrapper notices its child died and exits on its own — which fires the normal exited() cleanup above. */
@@ -225,6 +251,7 @@ Singleton {
         var proc = root._procs[appId];
         var pid = proc ? (proc.processId || 0) : root.pidFor(appId);
         if (pid <= 0) return;
+        root._stopRequested = Object.assign({}, root._stopRequested, { [appId]: true });
        Quickshell.execDetached(["sh", "-c", 'kill_tree() { for c in $(pgrep -P "$1" 2>/dev/null); do kill_tree "$c"; done; kill -KILL "$1" 2>/dev/null; }; kill_tree "$1"', "_", String(pid)]);
     }
 
