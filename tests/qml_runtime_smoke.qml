@@ -60,6 +60,14 @@ ShellRoot {
             fail("camera resolver returned an invalid V4L2 path")
             return
         }
+        // Validate the public CaptureSession reference without activating a
+        // physical camera. Recorder.qml uses this object to attach VideoOutput.
+        var captureSession = CameraRec.captureSession
+        if (!captureSession || !captureSession.camera ||
+            !captureSession.imageCapture || !captureSession.recorder) {
+            fail("CameraRec did not expose its CaptureSession and media objects")
+            return
+        }
     }
 
     Timer {
