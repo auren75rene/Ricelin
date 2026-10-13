@@ -4,6 +4,7 @@ import QtQuick
 import QtMultimedia
 import Quickshell
 import Quickshell.Io
+import "../lib/cameradevices.js" as CameraDevices
 
 Singleton {
     id: root
@@ -120,8 +121,11 @@ Singleton {
     /** Resolve the selected Qt camera identifier to a Linux V4L2 node. */
     function v4l2DevicePath() {
         var deviceId = camera.cameraDevice ? String(camera.cameraDevice.id || "") : ""
-        return /^\/dev\/video[0-9]+$/.test(deviceId) ? deviceId : "/dev/video0"
+        return CameraDevices.v4l2Path(deviceId)
     }
+
+    // Exposed as read-only state so lifecycle transitions can be regression-tested.
+    readonly property bool manualControlsQueued: manualControlTimer.running
 
     Timer {
         id: formatRefreshTimer
@@ -1226,6 +1230,9 @@ Singleton {
         if (videoRecording)
             stopVideo()
 
+        // Do not let a debounced write from the previous camera session run
+        // after the camera is closed and then quickly reopened.
+        manualControlTimer.stop()
         cameraActive = false
     }
 
@@ -1319,16 +1326,22 @@ Singleton {
                 return
             }
 
+            var devicePath = root.v4l2DevicePath()
+            if (!devicePath) {
+                console.warn("CameraRec: selected camera has no resolvable V4L2 path; skipping manual controls")
+                return
+            }
+
             if (root.exposureModeName === "auto") {
                 manualControlProc.command = [
                     "v4l2-ctl",
-                    "-d", root.v4l2DevicePath(),
+                    "-d", devicePath,
                     "--set-ctrl=auto_exposure=3,gain=0"
                 ]
             } else {
                 manualControlProc.command = [
                     "v4l2-ctl",
-                    "-d", root.v4l2DevicePath(),
+                    "-d", devicePath,
                     "--set-ctrl=auto_exposure=1,exposure_dynamic_framerate=0,exposure_time_absolute="
                         + root.manualExposureAbsolute
                         + ",gain=" + root.manualGain

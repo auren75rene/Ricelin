@@ -1,5 +1,5 @@
 #!/bin/sh
-# Headless integration test for EnvironmentManager QML imports and safe creation.
+# Headless integration test for EnvironmentManager, CameraRec and native desktop launch.
 set -eu
 
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
@@ -27,46 +27,75 @@ runtime="$work/runtime"
 qml_dir="$work/qml"
 game="$home/Games/RicelinRuntimeSmoke"
 prefix="$game/prefix"
-executable="$game/game.exe"
-workdir="$game/work"
+prefix_executable="$game/game.exe"
+workdir="$game/work dir"
+desktop_bin="$home/bin"
+desktop_executable="$desktop_bin/argv recorder"
+applications="$home/.local/share/applications"
+argv_log="$work/argv.log"
 log="$work/quickshell.log"
 
-mkdir -p -- "$home" "$config/hypr/scripts" "$runtime" "$qml_dir" "$workdir"
+mkdir -p -- "$home" "$config/hypr/scripts" "$runtime" "$qml_dir" "$workdir" "$desktop_bin" "$applications"
 chmod 700 "$runtime"
-: > "$executable"
+: > "$prefix_executable"
+
+cat > "$desktop_executable" <<'STUB'
+#!/bin/sh
+{
+    for arg do printf 'arg=%s\n' "$arg"; done
+    printf 'cwd=%s\n' "$PWD"
+} > "$RICELIN_TEST_ARGV_LOG"
+STUB
+chmod 755 "$desktop_executable"
+
+cat > "$applications/org.ricelin.runtime-smoke.desktop" <<EOF
+[Desktop Entry]
+Type=Application
+Name=Ricelin Runtime Smoke
+Exec="$desktop_executable" --alpha "value with spaces" --beta
+Path=$workdir
+Terminal=false
+NoDisplay=false
+EOF
+
 install -m 755 "$repo/configs/hypr/scripts/ricelin-prefix" "$config/hypr/scripts/ricelin-prefix"
 install -m 644 "$here/qml_runtime_smoke.qml" "$qml_dir/qml_runtime_smoke.qml"
-# Mirror the production import spelling from the pill directory.
+# Mirror the production layout so relative imports from Singletons resolve.
 ln -s "$repo/configs/quickshell/pill/Singletons" "$qml_dir/Singletons"
 ln -s "$repo/configs/quickshell/pill/lib" "$qml_dir/lib"
 
 env \
     HOME="$home" \
     XDG_CONFIG_HOME="$config" \
+    XDG_DATA_HOME="$home/.local/share" \
     XDG_RUNTIME_DIR="$runtime" \
     RICELIN_TEST_PREFIX="$prefix" \
-    RICELIN_TEST_EXECUTABLE="$executable" \
+    RICELIN_TEST_EXECUTABLE="$prefix_executable" \
+    RICELIN_TEST_DESKTOP_EXECUTABLE="$desktop_executable" \
+    RICELIN_TEST_ARGV_LOG="$argv_log" \
     RICELIN_TEST_WORKDIR="$workdir" \
     QT_QPA_PLATFORM=offscreen \
     QT_QUICK_BACKEND=software \
     quickshell -p "$qml_dir/qml_runtime_smoke.qml" >"$log" 2>&1 &
 qs_pid=$!
 
-# Quickshell does not reliably exit on Qt.quit() when no windows are created.
-# Wait for the QML success line, then stop only this disposable test process.
 attempt=0
-while ! grep -Fq 'RICELIN_QML_RUNTIME_SMOKE_DISPATCHED' "$log" 2>/dev/null; do
-    if ! kill -0 "$qs_pid" 2>/dev/null; then
-        wait "$qs_pid" 2>/dev/null || true
-        qs_pid=
-        echo "FAIL: Quickshell exited before the QML smoke test completed." >&2
+while ! grep -Fq 'RICELIN_QML_RUNTIME_SMOKE_PASS' "$log" 2>/dev/null; do
+    if grep -Fq 'RICELIN_QML_RUNTIME_SMOKE_FAIL:' "$log" 2>/dev/null; then
+        echo "FAIL: headless Quickshell runtime smoke reported an error." >&2
         cat "$log" >&2
         exit 1
     fi
-
+    if ! kill -0 "$qs_pid" 2>/dev/null; then
+        wait "$qs_pid" 2>/dev/null || true
+        qs_pid=
+        echo "FAIL: Quickshell exited before the smoke test completed." >&2
+        cat "$log" >&2
+        exit 1
+    fi
     attempt=$((attempt + 1))
-    if [ "$attempt" -ge 100 ]; then
-        echo "FAIL: timed out waiting for the QML smoke test." >&2
+    if [ "$attempt" -ge 150 ]; then
+        echo "FAIL: timed out waiting for the headless QML smoke test." >&2
         cat "$log" >&2
         exit 1
     fi
@@ -77,8 +106,6 @@ kill "$qs_pid" 2>/dev/null || true
 wait "$qs_pid" 2>/dev/null || true
 qs_pid=
 
-# execDetached() returns before the helper finishes; poll its marker.
-# runner=umu takes the helper's marker-only path and needs no Wine/UMU installed.
 attempt=0
 while [ ! -f "$prefix/.ricelin-prefix" ]; do
     attempt=$((attempt + 1))
@@ -89,7 +116,6 @@ while [ ! -f "$prefix/.ricelin-prefix" ]; do
     fi
     sleep 0.1
 done
-
 if [ "$(cat "$prefix/.ricelin-prefix")" != 'Ricelin-managed Wine/Proton prefix' ]; then
     echo "FAIL: unexpected prefix marker content." >&2
     cat "$log" >&2

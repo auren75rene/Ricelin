@@ -40,3 +40,38 @@ const empty = context.fromEntry({ id: "empty.desktop", name: "Empty", execString
 assert.equal(empty.executable, "");
 assert.deepEqual(Array.from(empty.args), []);
 console.log("  ok   missing command never falls back to raw Exec text");
+
+const entries = [
+    { id: "hidden.desktop", name: "Editor", noDisplay: true, command: ["/hidden"] },
+    { id: "org.example.Editor.desktop", name: "Renamed Editor", command: ["/opt/Editor", "--profile", "space path"], workingDirectory: "/opt/work", execString: '"/opt/Editor" --profile "space path"' },
+    { id: "fallback.desktop", name: "Editor", command: ["/opt/fallback"] }
+];
+const selected = context.findEntry(entries, {
+    runner: "native",
+    desktopEntryId: "org.example.Editor.desktop",
+    name: "Editor"
+});
+assert.equal(selected.id, "org.example.Editor.desktop", "stable desktop entry ID wins over a duplicate display name");
+console.log("  ok   native desktop entry resolution prefers stable ID and ignores NoDisplay");
+
+const savedEntry = {
+    command: ["editor", "--open", "--profile", "/tmp/profile with spaces"],
+    execString: 'editor --open "%U"'
+};
+assert.deepEqual(Array.from(context.nativeCommand(native, savedEntry)), ["editor", "--open", "--profile", "/tmp/profile with spaces"]);
+console.log("  ok   imported native app uses stored parsed argv with spaces");
+
+const edited = {
+    executable: "/custom/editor",
+    args: ["--profile", "a path with spaces"],
+    workingDirectory: "",
+    desktopEntryId: "org.example.Editor.desktop"
+};
+assert.deepEqual(Array.from(context.nativeCommand(edited, entries[1])), ["/custom/editor", "--profile", "a path with spaces"]);
+assert.equal(context.workingDirectoryFor(edited, entries[1]), "/opt/work");
+assert.equal(context.workingDirectoryFor({ executable: "/custom/bin/editor", workingDirectory: "/explicit/work" }, entries[1]), "/explicit/work");
+console.log("  ok   user-edited executable/arguments and working directory are respected");
+
+const legacy = { executable: entries[1].execString, args: [], workingDirectory: "" };
+assert.deepEqual(Array.from(context.nativeCommand(legacy, entries[1])), ["/opt/Editor", "--profile", "space path"]);
+console.log("  ok   legacy raw Exec records use parsed argv instead of shell text");

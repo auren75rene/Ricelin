@@ -26,6 +26,7 @@ jobs:
           node tests/test_blades.js
           node tests/test_dock.js
           node tests/test_desktopentry.js
+          node tests/test_cameradevices.js
       - name: prefix manager safety self-check
         run: sh tests/test_ricelin_prefix.sh
       - name: application registry parser self-check

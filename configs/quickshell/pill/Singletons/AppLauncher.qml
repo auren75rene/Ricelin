@@ -2,6 +2,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import "../lib/desktopentry.js" as DesktopImport
 
 /**
  * Execution layer: turns an AppRegistry record into a real process and keeps
@@ -70,32 +71,7 @@ Singleton {
     function desktopEntryFor(app) {
         if (!app || app.runner !== "native")
             return null;
-        var entries = DesktopEntries.applications.values || [];
-        var wantedId = String(app.desktopEntryId || "");
-        if (wantedId.length > 0) {
-            for (var i = 0; i < entries.length; ++i) {
-                var entry = entries[i];
-                if (entry && !entry.noDisplay && String(entry.id || "") === wantedId)
-                    return entry;
-            }
-        }
-        var oldId = String(app.id || "");
-        if (oldId.length > 0) {
-            for (var j = 0; j < entries.length; ++j) {
-                var byId = entries[j];
-                if (byId && !byId.noDisplay && String(byId.id || "") === oldId)
-                    return byId;
-            }
-        }
-        var wantedName = String(app.name || "").toLowerCase();
-        if (wantedName.length > 0) {
-            for (var k = 0; k < entries.length; ++k) {
-                var byName = entries[k];
-                if (byName && !byName.noDisplay && String(byName.name || "").toLowerCase() === wantedName)
-                    return byName;
-            }
-        }
-        return null;
+        return DesktopImport.findEntry(DesktopEntries.applications.values || [], app);
     }
 
     /** Builds { command, environment, workingDirectory } for the app's current runner. Extracted from launch() so AddApplicationSheet can preview it before saving. */
@@ -109,11 +85,7 @@ Singleton {
 
         var command;
         var desktopEntry = normalized.runner === "native" ? root.desktopEntryFor(normalized) : null;
-        var workingDirectory = normalized.workingDirectory && normalized.workingDirectory.length > 0
-            ? normalized.workingDirectory
-            : (desktopEntry && desktopEntry.workingDirectory
-                ? desktopEntry.workingDirectory
-                : root.dirName(normalized.executable));
+        var workingDirectory = DesktopImport.workingDirectoryFor(normalized, desktopEntry);
         var rt = normalized.runtime || {};
         if (normalized.runner === "umu") {
             env.GAMEID = normalized.umuId && normalized.umuId.length > 0 ? normalized.umuId : ("umu-" + normalized.id);
@@ -127,9 +99,7 @@ Singleton {
             var wineBin = normalized.runner === "wine-staging" && !root.wineIsStaging ? "wine-staging" : "wine";
             command = [wineBin, normalized.executable].concat(normalized.args || []);
         } else {
-            command = desktopEntry && desktopEntry.command && desktopEntry.command.length > 0
-                ? desktopEntry.command.slice()
-                : [normalized.executable].concat(normalized.args || []);
+            command = DesktopImport.nativeCommand(normalized, desktopEntry);
         }
         if (normalized.performance && normalized.performance.mangohud) command = ["mangohud"].concat(command);
         if (normalized.performance && normalized.performance.gamescope) command = ["gamescope", "--"].concat(command);

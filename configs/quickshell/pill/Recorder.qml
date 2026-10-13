@@ -7,6 +7,7 @@ import Quickshell.Io
 import Quickshell.Widgets
 import Quickshell.Services.Pipewire
 import "Singletons"
+import "lib/cameradevices.js" as CameraDevices
 
 /**
  * 録 RECORD surface: drives gpu-screen-recorder through the ScreenRec singleton,
@@ -246,7 +247,7 @@ PillSurface {
         ScreenRec.recorderOpen = active;
 
         if (!active) {
-            var keepScreenCamera = root.screenCameraMode && ScreenRec.recording;
+            var keepScreenCamera = CameraDevices.shouldKeepScreenCamera(root.screenCameraMode, ScreenRec.recording);
 
             if (CameraRec.videoRecording)
                 CameraRec.stopVideo();
