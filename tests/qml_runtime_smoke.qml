@@ -1,14 +1,20 @@
 import QtQuick
 import Quickshell
-import "../configs/quickshell/pill/Singletons" as RicelinSingletons
+import "Singletons"
 
 ShellRoot {
     Component.onCompleted: {
-        var manager = RicelinSingletons.EnvironmentManager;
-        var methods = ["create", "openFiles", "winetricks", "clone", "reset", "remove"];
+        var methods = [
+            EnvironmentManager.create,
+            EnvironmentManager.openFiles,
+            EnvironmentManager.winetricks,
+            EnvironmentManager.clone,
+            EnvironmentManager.reset,
+            EnvironmentManager.remove
+        ];
         for (var i = 0; i < methods.length; ++i) {
-            if (typeof manager[methods[i]] !== "function") {
-                console.error("RICELIN_QML_RUNTIME_SMOKE_FAIL: missing EnvironmentManager." + methods[i]);
+            if (typeof methods[i] !== "function") {
+                console.error("RICELIN_QML_RUNTIME_SMOKE_FAIL: EnvironmentManager API is incomplete");
                 Qt.quit();
                 return;
             }
@@ -23,7 +29,7 @@ ShellRoot {
             return;
         }
 
-        if (!manager.create({
+        if (!EnvironmentManager.create({
             prefix: prefix,
             runner: "umu",
             executable: executable,

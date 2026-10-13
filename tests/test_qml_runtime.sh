@@ -23,16 +23,20 @@ trap cleanup EXIT HUP INT TERM
 home="$work/home"
 config="$work/config"
 runtime="$work/runtime"
+qml_dir="$work/qml"
 game="$home/Games/RicelinRuntimeSmoke"
 prefix="$game/prefix"
 executable="$game/game.exe"
 workdir="$game/work"
 log="$work/quickshell.log"
 
-mkdir -p -- "$home" "$config/hypr/scripts" "$runtime" "$workdir"
+mkdir -p -- "$home" "$config/hypr/scripts" "$runtime" "$qml_dir" "$workdir"
 chmod 700 "$runtime"
 : > "$executable"
 install -m 755 "$repo/configs/hypr/scripts/ricelin-prefix" "$config/hypr/scripts/ricelin-prefix"
+install -m 644 "$here/qml_runtime_smoke.qml" "$qml_dir/qml_runtime_smoke.qml"
+# Mirror the production import spelling from the pill directory.
+ln -s "$repo/configs/quickshell/pill/Singletons" "$qml_dir/Singletons"
 
 if ! env \
     HOME="$home" \
@@ -43,7 +47,7 @@ if ! env \
     RICELIN_TEST_WORKDIR="$workdir" \
     QT_QPA_PLATFORM=offscreen \
     QT_QUICK_BACKEND=software \
-    timeout 15s quickshell -p "$here/qml_runtime_smoke.qml" >"$log" 2>&1; then
+    timeout 15s quickshell -p "$qml_dir/qml_runtime_smoke.qml" >"$log" 2>&1; then
     echo "FAIL: Quickshell did not complete the headless QML smoke test." >&2
     cat "$log" >&2
     exit 1
