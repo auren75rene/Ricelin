@@ -59,7 +59,7 @@ Singleton {
 
     function runtimeAvailable(id) {
         if (id === "wine") return root.hasWine;
-        if (id === "wine-staging") return root.hasWineStaging || root.hasWine;
+        if (id === "wine-staging") return root.hasWineStaging;
         if (id === "umu") return root.hasUmu;
         if (id === "steam") return root.hasSteam;
         return id === "native";
@@ -91,7 +91,7 @@ Singleton {
     function recommend(app) {
         var api = app && app.graphicsApi ? app.graphicsApi : "unknown";
         if (api === "d3d12" && root.hasUmu && root.protonBuilds.length > 0) {
-            return { runner: "umu", protonBuild: root.protonBuilds[0].name, reason: "Direct3D 12 — UMU + " + root.protonBuilds[0].name + " carries VKD3D-Proton." };
+            return { runner: "umu", protonBuild: root.protonBuilds[0].path || root.protonBuilds[0].name, reason: "Direct3D 12 — UMU + " + root.protonBuilds[0].name + " carries VKD3D-Proton." };
         }
         if (api === "d3d12" && root.hasUmu) {
             return { runner: "umu", protonBuild: "GE-Proton", reason: "Direct3D 12 wants UMU + Proton, but no local build was found under compatibilitytools.d — install GE-Proton or point Proton build at one manually." };
@@ -106,7 +106,7 @@ Singleton {
             return { runner: "wine", protonBuild: "", reason: "Defaulting to Wine." };
         }
         if (root.hasUmu) {
-            return { runner: "umu", protonBuild: root.protonBuilds.length > 0 ? root.protonBuilds[0].name : "GE-Proton", reason: "Wine isn't on PATH — falling back to UMU." };
+            return { runner: "umu", protonBuild: root.protonBuilds.length > 0 ? (root.protonBuilds[0].path || root.protonBuilds[0].name) : "GE-Proton", reason: "Wine isn't on PATH — falling back to UMU." };
         }
         return { runner: "wine", protonBuild: "", reason: "No compatibility layer detected yet — install Wine or UMU, then Rescan." };
     }

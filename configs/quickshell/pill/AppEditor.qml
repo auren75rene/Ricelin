@@ -461,8 +461,18 @@ Item {
             last: true
             control: SettingsSeg {
                 s: root.s
-                options: (RuntimeManager.protonBuilds.length > 0 ? RuntimeManager.protonBuilds.map(b => ({ label: b.name, value: b.name })) : [ { label: "GE-Proton", value: "GE-Proton" } ])
-                value: root.app.protonBuild
+                options: (RuntimeManager.protonBuilds.length > 0 ? RuntimeManager.protonBuilds.map(b => ({ label: b.name, value: b.path || b.name })) : [ { label: "GE-Proton", value: "GE-Proton" } ])
+                value: {
+                    var current = String(root.app.protonBuild || "");
+                    for (var i = 0; i < RuntimeManager.protonBuilds.length; ++i) {
+                        var build = RuntimeManager.protonBuilds[i];
+                        if (build.path === current)
+                            return current;
+                        if (build.name === current)
+                            return build.path || current;
+                    }
+                    return current;
+                }
                 onPicked: (v) => root.patch({ protonBuild: v })
             }
         }

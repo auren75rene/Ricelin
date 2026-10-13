@@ -61,7 +61,7 @@ Singleton {
         id: thumbProc
 
         command: [
-            "sh",
+            "bash",
             "-c",
             "mkdir -p " +
             "'" + root.qsReplaceAll(root.cacheRoot, "'", "'\\''") + "'" +
@@ -113,11 +113,12 @@ Singleton {
         if (p.indexOf("file:") === 0)
             return p
 
-        // Absolute local path -> exactly three slashes after file:
-        if (p.charAt(0) === "/")
-            return "file://" + p
+        // Encode path segments separately so # and ? remain literal filename characters.
+        var encoded = p.split("/").map(part => encodeURIComponent(part)).join("/");
+        if (encoded.charAt(0) === "/")
+            return "file://" + encoded
 
-        return "file:///" + p
+        return "file:///" + encoded
     }
 
     function filename(path) {

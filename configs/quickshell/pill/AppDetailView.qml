@@ -32,8 +32,11 @@ Item {
     implicitHeight: col.implicitHeight
 
     readonly property var runtimeLine: {
-        if (root.app.runner === "umu")
-            return (root.app.protonBuild || "Proton") + " · VKD3D-Proton";
+        if (root.app.runner === "umu") {
+            var build = String(root.app.protonBuild || "Proton").replace(/\/+$/, "");
+            var parts = build.split("/");
+            return (parts[parts.length - 1] || "Proton") + " · VKD3D-Proton";
+        }
         if (root.app.runner === "wine-staging")
             return "Wine-Staging · DXVK";
         if (root.app.runner === "wine")
