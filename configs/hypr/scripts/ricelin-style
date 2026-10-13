@@ -176,9 +176,9 @@ remember() {
 forget() { rm -f "$state_file" 2>/dev/null; }
 
 stop_all_except() {
-    for id in $(all_ids); do
-        [ "$id" = "$1" ] && continue
-        stop_style "$id"
+    for other_id in $(all_ids); do
+        [ "$other_id" = "$1" ] && continue
+        stop_style "$other_id"
     done
 }
 

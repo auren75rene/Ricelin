@@ -106,11 +106,11 @@ echo "inhibit"
 new_env; as_systemd; stub systemd-inhibit
 run inhibit idle
 expect "systemd-inhibit with the right arguments" \
-    '^systemd-inhibit --what=idle:sleep --who=Ricelin --why=keep awake --mode=block sleep infinity'
+    '^systemd-inhibit --what=idle --who=Ricelin --why=keep awake --mode=block sleep infinity'
 
 new_env; stub systemd-inhibit; stub elogind-inhibit
 run inhibit idle
-expect "elogind-inhibit off-systemd" '^elogind-inhibit --what=idle:sleep'
+expect "elogind-inhibit off-systemd" '^elogind-inhibit --what=idle'
 refute "systemd-inhibit untouched off-systemd" '^systemd-inhibit'
 
 new_env; stub wlinhibit

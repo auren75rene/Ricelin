@@ -126,11 +126,11 @@ cmd_inhibit() {
     [ "${1:-idle}" = idle ] || usage
     why="${2:-keep awake}"
     if under_systemd && have systemd-inhibit; then
-        exec systemd-inhibit --what=idle:sleep --who=Ricelin --why="$why" \
+        exec systemd-inhibit --what=idle --who=Ricelin --why="$why" \
             --mode=block sleep infinity
     fi
     if have elogind-inhibit; then
-        exec elogind-inhibit --what=idle:sleep --who=Ricelin --why="$why" \
+        exec elogind-inhibit --what=idle --who=Ricelin --why="$why" \
             --mode=block sleep infinity
     fi
     # No logind at all: hold a plain Wayland idle inhibitor if a client is installed.

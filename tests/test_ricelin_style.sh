@@ -95,11 +95,12 @@ run list >/dev/null
 [ -e "$fake/pwned" ] && bad ".conf files are never executed" || ok ".conf files are never executed"
 
 echo "switch"
-new_env; folder Persona-Quickshell; folder Other-Quickshell
+new_env; folder Persona-Quickshell; folder Other-Quickshell; folder Zebra-Quickshell
 FAKE_RUNNING="Other-Quickshell"
 export FAKE_RUNNING
 run switch persona >/dev/null
 expect "stops the other styles" "^qs-toggle --stop config $HOME/.config/quickshell/Other-Quickshell"
+expect "stops a style after the chosen one without clobbering the request" "^qs-toggle --stop config $HOME/.config/quickshell/Zebra-Quickshell"
 expect "starts the chosen one" "^qs-toggle --start config $HOME/.config/quickshell/Persona-Quickshell"
 refute "never stops the one it starts" "^qs-toggle --stop config $HOME/.config/quickshell/Persona-Quickshell"
 is "the choice is remembered" "$(cat "$HOME/.local/state/ricelin/style")" persona
