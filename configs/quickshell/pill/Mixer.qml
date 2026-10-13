@@ -609,10 +609,13 @@ PillSurface {
             subLabel: "Vibrance"
             subPersistent: false
             focused: root.focusIndex === root.faderCount - 3
-            value: Devices.vibrance / 100
-            valueLabel: Devices.vibrance + "%"
-            onMoved: (v) => Devices.vibrance = Math.round(v * 100)
-            onCommitted: (v) => { root.pendingVibrance = v * 100; vibDebounce.restart(); }
+            value: (root.pendingVibrance >= 0 ? root.pendingVibrance : Devices.vibrance) / 100
+            valueLabel: (root.pendingVibrance >= 0 ? root.pendingVibrance : Devices.vibrance) + "%"
+            onMoved: (v) => root.pendingVibrance = Math.max(0, Math.min(100, Math.round(v * 100)))
+            onCommitted: (v) => {
+                root.pendingVibrance = Math.max(0, Math.min(100, Math.round(v * 100)));
+                vibDebounce.restart();
+            }
         }
         VFader {
             id: volFader

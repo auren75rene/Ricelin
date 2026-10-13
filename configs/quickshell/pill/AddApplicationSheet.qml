@@ -31,6 +31,7 @@ Item {
     property string prefix: ""
     property bool nameTouched: false
     property bool prefixTouched: false
+    property bool applyingExecutablePick: false
 
     readonly property bool canAdd: root.name.trim().length > 0 && root.executable.trim().length > 0
 
@@ -53,6 +54,7 @@ Item {
     function onExecutablePicked(p) {
         if (!p || p.length === 0)
             return;
+        root.applyingExecutablePick = true;
         root.executable = p;
         if (!root.nameTouched)
             root.name = root.baseName(p);
@@ -60,6 +62,7 @@ Item {
             root.workingDirectory = root.dirOf(p);
         if (!root.prefixTouched && root.name.length > 0)
             root.prefix = (Quickshell.env("HOME") || "") + "/Games/" + root.toFolderName(root.name) + "/prefix";
+        root.applyingExecutablePick = false;
     }
 
     function submit() {
@@ -150,7 +153,7 @@ Item {
             label: "Name"
             text: root.name
             placeholder: "How it appears in Ricelin"
-            onTextChanged: { root.name = text; if (text.length > 0) root.nameTouched = true; }
+            onTextChanged: { root.name = text; if (!root.applyingExecutablePick && text.length > 0) root.nameTouched = true; }
         }
         Item { width: 1; height: 10 * root.s }
 
@@ -195,7 +198,7 @@ Item {
             placeholder: "Where its Windows environment lives"
             browse: "folder"
             last: true
-            onTextChanged: { root.prefix = text; if (text.length > 0) root.prefixTouched = true; }
+            onTextChanged: { root.prefix = text; if (!root.applyingExecutablePick && text.length > 0) root.prefixTouched = true; }
         }
 
         Item { width: 1; height: 18 * root.s }
