@@ -76,6 +76,7 @@ PillSurface {
 
     readonly property bool cameraBusy:
         CameraRec.videoRecording ||
+        CameraRec.startingVideo ||
         CameraRec.capturingPhoto
 
     /**
@@ -571,16 +572,18 @@ PillSurface {
                     text: root.cameraMode
                         ? (CameraRec.videoRecording
                             ? "REC"
-                            : (CameraRec.capturingPhoto
-                                ? "SAVING"
-                                : (CameraRec.cameraActive
-                                    ? "LIVE"
-                                    : "OFF")))
+                            : (CameraRec.startingVideo
+                                ? "STARTING"
+                                : (CameraRec.capturingPhoto
+                                    ? "SAVING"
+                                    : (CameraRec.cameraActive
+                                        ? "LIVE"
+                                        : "OFF"))))
                         : (ScreenRec.recording
                             ? root.fmtTime(root.elapsed)
                             : (root.counting ? "GET READY" : "IDLE"))
                     color: root.cameraMode
-                        ? (CameraRec.videoRecording ? Theme.vermLit : Theme.dim)
+                        ? ((CameraRec.videoRecording || CameraRec.startingVideo) ? Theme.vermLit : Theme.dim)
                         : (ScreenRec.recording ? Theme.vermLit : Theme.dim)
                     font.family: Theme.font
                     font.pixelSize: 10 * root.s
@@ -745,6 +748,7 @@ PillSurface {
 
                 onPicked: (v) => {
                     if (!CameraRec.videoRecording &&
+                        !CameraRec.startingVideo &&
                         !CameraRec.capturingPhoto)
                         root.cameraCaptureMode = v
                 }
@@ -1333,9 +1337,11 @@ PillSurface {
                     text: root.cameraMode
                         ? (CameraRec.videoRecording
                             ? "Stop video"
-                            : (root.cameraPhotoMode
-                                ? "Take photo"
-                                : "Start video"))
+                            : (CameraRec.startingVideo
+                                ? "Starting video…"
+                                : (root.cameraPhotoMode
+                                    ? "Take photo"
+                                    : "Start video")))
                         : (ScreenRec.recording
                             ? (ScreenRec.canStop ? "Stop recording" : "External recording")
                             : (root.counting
@@ -1355,9 +1361,13 @@ PillSurface {
                     text: root.cameraMode
                         ? (CameraRec.capturingPhoto
                             ? "saving…"
-                            : (root.cameraVideoMode
-                                ? "tap to record"
-                                : "tap"))
+                            : (CameraRec.startingVideo
+                                ? "preparing…"
+                                : (CameraRec.videoRecording
+                                    ? "tap to stop"
+                                    : (root.cameraVideoMode
+                                        ? "tap to record"
+                                        : "tap")))
                         : (ScreenRec.recording && !ScreenRec.canStop
                             ? "stop externally"
                             : (root.counting
