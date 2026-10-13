@@ -21,5 +21,5 @@ function canStart(recording, processRunning, directoryPreparing, captureToken) {
 
 /** A failed mkdir must never be treated as a ready recording destination. */
 function directoryReady(exitCode) {
-    return Number(exitCode) === 0
+    return typeof exitCode === "number" && isFinite(exitCode) && exitCode === 0
 }
