@@ -71,7 +71,19 @@ ShellRoot {
         onTriggered: {
             root.attempts += 1
             if (root.attempts > 150) {
-                root.fail("timed out waiting for registry, desktop entry or launched process")
+                var diagnostics = "AppRegistry.ready=" + AppRegistry.ready
+                    + ", loadError=" + AppRegistry.loadError
+                    + ", desktopEntries=" + (DesktopEntries.applications.values || []).length
+                var values = DesktopEntries.applications.values || []
+                var matches = []
+                for (var j = 0; j < values.length; ++j) {
+                    var candidate = values[j]
+                    if (candidate && (String(candidate.id || "").toLowerCase().indexOf("ricelin") >= 0
+                        || String(candidate.name || "").toLowerCase().indexOf("ricelin") >= 0)) {
+                        matches.push(String(candidate.id || "") + " (" + String(candidate.name || "") + ")")
+                    }
+                }
+                root.fail("timeout state: " + diagnostics + "; matching entries=" + JSON.stringify(matches))
                 return
             }
 
