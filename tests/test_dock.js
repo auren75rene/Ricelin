@@ -196,20 +196,36 @@ check("window beads clear their own lens, neighboring active tints, and the caps
 
     const lensHalfSize = (44 * 0.68 + 8) / 2;
     const lensCornerRadius = 16;
-    const lensCornerReach = Math.SQRT2 * (lensHalfSize - lensCornerRadius + lensCornerRadius / Math.SQRT2);
     const activeTintHalfSize = (44 * 0.68 + 6) / 2;
-    const minOrbitRadius = 25 * (1 - 0.01);
-    const maxOrbitRadius = 25 * (1 + 0.01);
-    const maxVerticalRadius = 25 * Math.sqrt(1 - 0.01 * 0.01);
+    const activeTintCornerRadius = 12;
+    const orbitAxis = 25;
+    const eccentricity = 0.01;
+    const maxOrbitRadius = orbitAxis * (1 + eccentricity);
     const activeHaloRadius = 4 * 1.2 / 2;
     const capsuleHalfWidth = 44 / 2 + 9;
     const staticRailCenterRadius = 26;
     const cellPitch = 44 + 4;
-    const neighbourCenterDistance = cellPitch - maxVerticalRadius;
-    assert.ok(minOrbitRadius - activeHaloRadius > lensCornerReach,
-        "active bead halo must clear its own rounded lens throughout the orbit");
-    assert.ok(neighbourCenterDistance - activeHaloRadius > activeTintHalfSize,
-        "active bead halo must not intrude into the adjacent app's active tint");
+    function roundedRectDistance(x, y, halfSize, cornerRadius) {
+        const qx = Math.abs(x) - halfSize + cornerRadius;
+        const qy = Math.abs(y) - halfSize + cornerRadius;
+        return Math.hypot(Math.max(qx, 0), Math.max(qy, 0))
+            + Math.min(Math.max(qx, qy), 0) - cornerRadius;
+    }
+    let minOwnClearance = Infinity;
+    let minNeighbourClearance = Infinity;
+    for (let i = 0; i < 1440; i++) {
+        const p = D.orbitPosition(2 * Math.PI * i / 1440, orbitAxis, eccentricity);
+        minOwnClearance = Math.min(minOwnClearance,
+            roundedRectDistance(p.x, p.y, lensHalfSize, lensCornerRadius) - activeHaloRadius);
+        for (const neighbourY of [-cellPitch, cellPitch]) {
+            minNeighbourClearance = Math.min(minNeighbourClearance,
+                roundedRectDistance(p.x, p.y - neighbourY, activeTintHalfSize, activeTintCornerRadius) - activeHaloRadius);
+        }
+    }
+    assert.ok(minOwnClearance > 1,
+        "active bead halo must clear its own rounded lens at every sampled orbit point");
+    assert.ok(minNeighbourClearance > 1,
+        "active bead halo must not intrude into either adjacent app's active tint");
     assert.ok(capsuleHalfWidth - maxOrbitRadius - activeHaloRadius > 1,
         "active bead halo must keep visible clearance from the glass capsule side");
     assert.ok(9 + 12 + 44 / 2 - maxOrbitRadius - activeHaloRadius > 1,
