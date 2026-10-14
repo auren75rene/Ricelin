@@ -73,7 +73,7 @@ Item {
 
         // App focus hugs the glyph, not the whole clickable tile. The window
         // beads orbit outside this compact frame and keep their own hit targets.
-        var focusSize = isAppIcon ? target.tile * 0.68 : 0;
+        var focusSize = isAppIcon ? target.tile * 0.82 : 0;
         var focusOffsetX = isAppIcon ? (target.width - focusSize) / 2 : 0;
         var focusOffsetY = isAppIcon ? (target.height - focusSize) / 2 : 0;
 
