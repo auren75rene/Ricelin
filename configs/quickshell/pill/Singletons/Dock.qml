@@ -43,10 +43,12 @@ Singleton {
      */
     readonly property real edgePx: 10
     readonly property real tilePx: 44
-    /** Symmetric inner margin; keeps the icon axis centred while leaving room for orbital pips. */
-    readonly property real padPx: 14
+    /** Vertical inset; kept independent from the pip clearance. */
+    readonly property real padPx: 9
+    /** Symmetric horizontal inset; keeps icons centered while allowing orbital pips to breathe. */
+    readonly property real sidePadPx: 14
     /** Screen edge to the capsule's far side. */
-    readonly property real footprintPx: edgePx + tilePx + 2 * padPx
+    readonly property real footprintPx: edgePx + tilePx + 2 * sidePadPx
 
     readonly property string dir: (Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config")) + "/ricelin"
     readonly property string path: root.dir + "/dock.json"
