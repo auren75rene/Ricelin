@@ -17,6 +17,9 @@ Singleton {
 
     property var list: []
     property bool busy: false
+    property string pendingAction: ""
+
+    signal registrationFinished(bool succeeded)
 
     readonly property string script: Quickshell.env("HOME") + "/.config/hypr/scripts/ricelin-style"
 
@@ -62,6 +65,14 @@ Singleton {
         actProc.running = true;
     }
 
+    /** Register an external Quickshell setup using ricelin-style's validated CLI. */
+    function registerStyle(id, name, kind, target, note) {
+        if (root.busy)
+            return;
+        root.pendingAction = "register";
+        root.run(["add", id, name, kind, target, note || ""]);
+    }
+
     Process {
         id: listProc
         command: [root.script, "list"]
@@ -74,7 +85,11 @@ Singleton {
         id: actProc
         onExited: { // qmllint disable signal-handler-parameters
             root.busy = false;
-            // A new instance takes a moment to show up as running.
+            if (root.pendingAction === "register")
+                root.registrationFinished(actProc.exitCode === 0);
+            root.pendingAction = "";
+            // A new instance takes a moment to show up as running; registrations
+            // also refresh the index after the script has written its .conf file.
             settle.restart();
         }
     }
