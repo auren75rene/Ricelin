@@ -45,15 +45,19 @@ for rel in $files; do
     # If an individual destination is a symlink, update its referent so the
     # existing link stays intact. If it points back at this checkout, there's
     # no separate deployed copy to update.
-    if [ -L "$dest" ]; then
+    src_resolved=$(readlink -f "$src")
+    if [ -e "$dest" ] || [ -L "$dest" ]; then
         resolved=$(readlink -f "$dest") || die "cannot resolve symlink: $dest"
         [ -n "$resolved" ] && [ -f "$resolved" ] || die "broken symlink: $dest"
-        src_resolved=$(readlink -f "$src")
         if [ "$resolved" = "$src_resolved" ]; then
             printf 'Already sourced from checkout: %s\n' "$rel"
             continue
         fi
-        dest="$resolved"
+        # If this individual file is a symlink, replace its referent while
+        # retaining the symlink itself.
+        if [ -L "$dest" ]; then
+            dest="$resolved"
+        fi
     fi
 
     if [ -e "$dest" ]; then
