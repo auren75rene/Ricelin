@@ -137,6 +137,21 @@ check("a focus elsewhere starts from the first window", () => {
     assert.strictEqual(D.nextWindow(item, "0x99").address, "0x1");
 });
 
+console.log("windowAt");
+check("pip index selects the matching window", () => {
+    const item = { windows: [win("0x1", "f"), win("0x2", "f"), win("0x3", "f")] };
+    assert.strictEqual(D.windowAt(item, 0).address, "0x1");
+    assert.strictEqual(D.windowAt(item, 1).address, "0x2");
+    assert.strictEqual(D.windowAt(item, 2).address, "0x3");
+});
+check("windowAt rejects missing, fractional and out-of-range indexes", () => {
+    const item = { windows: [win("0x1", "f")] };
+    assert.strictEqual(D.windowAt(item, -1), null);
+    assert.strictEqual(D.windowAt(item, 1), null);
+    assert.strictEqual(D.windowAt(item, 0.5), null);
+    assert.strictEqual(D.windowAt(null, 0), null);
+});
+
 console.log("pins");
 check("togglePin adds at the end", () => same(D.togglePin(["a"], "b"), ["a", "b"]));
 check("togglePin removes an existing pin, ignoring case and .desktop", () => {
