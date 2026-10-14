@@ -143,17 +143,40 @@ check("orbital position reaches periapsis and apoapsis", () => {
     assert.ok(Math.abs(apo.x + 22) < 1e-10);
     assert.ok(Math.abs(apo.y) < 1e-10);
 });
-check("focused pips animate from uniform mean anomaly through the orbit helper", () => {
-    assert.ok(dockItemSrc.includes("NumberAnimation on orbitMeanAnomaly"));
-    assert.ok(dockItemSrc.includes("running: !!(root.item && root.item.active)"));
-    assert.ok(dockItemSrc.includes("Behavior on orbitMix"));
+check("cursor hover triggers a finite acceleration/deceleration orbit", () => {
+    assert.ok(dockItemSrc.includes("property real orbitBurstProgress: 0"));
+    assert.ok(dockItemSrc.includes("onHoveredChanged: {"));
+    assert.ok(dockItemSrc.includes("root.hovered && root.item && root.item.running > 0"));
+    assert.ok(dockItemSrc.includes("duration: 250"));
+    assert.ok(dockItemSrc.includes("easing.type: Easing.InCubic"));
+    assert.ok(dockItemSrc.includes("duration: 360"));
+    assert.ok(dockItemSrc.includes("easing.type: Easing.OutCubic"));
+    assert.ok(dockItemSrc.includes("property real orbitMix: root.hovered ? 1 : 0"));
     assert.ok(dockItemSrc.includes("DockLib.orbitPosition("));
     assert.ok(dockItemSrc.includes("root.windowActivated(pipHit.index)"));
+    assert.ok(!dockItemSrc.includes("Animation.Infinite"), "hover effect must not rotate forever");
+    assert.ok(!dockItemSrc.includes("orbitMeanAnomaly"), "continuous orbital animation should be removed");
 });
-check("hover lens reserves outer-edge room for static window pips", () => {
+check("window beads return smoothly when the cursor leaves", () => {
+    assert.ok(dockItemSrc.includes("Freeze the sweep where it is"));
+    assert.ok(dockItemSrc.includes("orbitBurst.stop();"));
+    assert.ok(dockItemSrc.includes("Behavior on orbitMix"));
+});
+check("hover lens stays centred and leaves room for the orbiting beads", () => {
     assert.ok(dockBodySrc.includes("var hasPips = !!(target.item && target.item.running > 0);"));
-    assert.ok(dockBodySrc.includes("var growLeft = hasPips && !Dock.onRight ? pipRoom : 0;"));
-    assert.ok(dockBodySrc.includes("var growRight = hasPips && Dock.onRight ? pipRoom : 0;"));
+    assert.ok(dockBodySrc.includes("var pipRoom = hasPips ? 8 * root.s : 0;"));
+    assert.ok(dockBodySrc.includes("root.lensX = p.x - inflate - pipRoom;"));
+    assert.ok(dockBodySrc.includes("target.width + 2 * inflate + 2 * pipRoom"));
+});
+check("beads and focus lens use glass-like highlights without another border", () => {
+    assert.ok(dockItemSrc.includes("Tiny glass bead: tinted core, darkened lower edge, bright rim"));
+    assert.ok(dockItemSrc.includes("pipHit.windowActive ? Qt.lighter(Theme.onGlow, 1.65)"));
+    assert.ok(dockItemSrc.includes("The glint is deliberately offset"));
+    const match = dockBodySrc.match(/\/\/ The lens:[\\s\\S]*?Rectangle\\s*\\{([\\s\\S]*?)\n            \\}/);
+    assert.ok(match, "shared hover lens should exist");
+    assert.ok(match[1].includes("GradientStop { position: 0; color: Qt.alpha(Theme.bright, 0.15) }"));
+    assert.ok(match[1].includes("border.width: 1"));
+    assert.ok(match[1].includes("Refraction-inspired streaks"));
 });
 
 console.log("nextWindow");
