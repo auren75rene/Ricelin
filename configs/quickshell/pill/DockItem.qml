@@ -66,9 +66,9 @@ Item {
         // Keep the persistent active-state tint as compact as the shared lens.
         // This is fill only; DockBody remains the sole owner of the outline.
         anchors.centerIn: iconBox
-        width: iconBox.width + 14 * root.s
+        width: iconBox.width + 6 * root.s
         height: width
-        radius: 15 * root.s
+        radius: 12 * root.s
         color: Qt.alpha(Theme.bright, 0.065)
         opacity: root.item && root.item.active ? 1 : 0
         Behavior on opacity { NumberAnimation { duration: Motion.fast } }
@@ -197,7 +197,7 @@ Item {
                 readonly property bool windowActive:
                     windowRecord && windowRecord.address === Dock.activeAddress
                 readonly property real eccentricity: 0.01
-                readonly property real semiMajorAxis: 28.3 * root.s
+                readonly property real semiMajorAxis: 25 * root.s
                 readonly property real phase:
                     2 * Math.PI * index / Math.max(1, dotCount)
                 readonly property var orbitalPosition:
