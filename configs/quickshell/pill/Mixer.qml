@@ -564,11 +564,14 @@ PillSurface {
                 subLabel: "Brightness"
                 subPersistent: false
                 focused: root.focusIndex === brRep.count
-                value: Devices.backlightPct / 100
-                valueLabel: Devices.backlightPct + "%"
+                value: (root.pendingBacklight >= 0 ? root.pendingBacklight : Devices.backlightPct) / 100
+                valueLabel: (root.pendingBacklight >= 0 ? root.pendingBacklight : Devices.backlightPct) + "%"
                 onMoved: (v) => {
-                    const pct = Math.max(1, Math.min(100, Math.round(v * 100)));
-                    Devices.setBacklight(pct);
+                    root.pendingBacklight = Math.max(1, Math.min(100, Math.round(v * 100)));
+                }
+                onCommitted: (v) => {
+                    root.pendingBacklight = Math.max(1, Math.min(100, Math.round(v * 100)));
+                    blDebounce.restart();
                 }
             }
         }
@@ -586,11 +589,14 @@ PillSurface {
                 subLabel: "Keyboard"
                 subPersistent: false
                 focused: root.focusIndex === brRep.count + (blLoader.active ? 1 : 0)
-                value: Devices.keyboardBacklightPct / 100
-                valueLabel: Devices.keyboardBacklightPct + "%"
+                value: (root.pendingKeyboardBacklight >= 0 ? root.pendingKeyboardBacklight : Devices.keyboardBacklightPct) / 100
+                valueLabel: (root.pendingKeyboardBacklight >= 0 ? root.pendingKeyboardBacklight : Devices.keyboardBacklightPct) + "%"
                 onMoved: (v) => {
-                    const pct = Math.max(0, Math.min(100, Math.round(v * 100)));
-                    Devices.setKeyboardBacklight(pct);
+                    root.pendingKeyboardBacklight = Math.max(0, Math.min(100, Math.round(v * 100)));
+                }
+                onCommitted: (v) => {
+                    root.pendingKeyboardBacklight = Math.max(0, Math.min(100, Math.round(v * 100)));
+                    kbBlDebounce.restart();
                 }
             }
         }
@@ -603,10 +609,13 @@ PillSurface {
             subLabel: "Vibrance"
             subPersistent: false
             focused: root.focusIndex === root.faderCount - 3
-            value: Devices.vibrance / 100
-            valueLabel: Devices.vibrance + "%"
-            onMoved: (v) => Devices.vibrance = Math.round(v * 100)
-            onCommitted: (v) => { root.pendingVibrance = v * 100; vibDebounce.restart(); }
+            value: (root.pendingVibrance >= 0 ? root.pendingVibrance : Devices.vibrance) / 100
+            valueLabel: (root.pendingVibrance >= 0 ? root.pendingVibrance : Devices.vibrance) + "%"
+            onMoved: (v) => root.pendingVibrance = Math.max(0, Math.min(100, Math.round(v * 100)))
+            onCommitted: (v) => {
+                root.pendingVibrance = Math.max(0, Math.min(100, Math.round(v * 100)));
+                vibDebounce.restart();
+            }
         }
         VFader {
             id: volFader

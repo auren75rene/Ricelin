@@ -4,6 +4,7 @@ import QtQuick
 import QtMultimedia
 import Quickshell
 import Quickshell.Io
+import "../lib/cameradevices.js" as CameraDevices
 
 Singleton {
     id: root
@@ -14,7 +15,9 @@ Singleton {
 
     property bool cameraActive: false
     property bool videoRecording: false
+    property bool startingVideo: false
     property bool capturingPhoto: false
+    property bool cameraStopPending: false
     property string currentFile: ""
 
     // -----------------------------------------------------------------
@@ -96,7 +99,7 @@ Singleton {
         mediaDevices.audioInputs.length > 0
 
     readonly property bool recordingLocked:
-        videoRecording || capturingPhoto
+        videoRecording || startingVideo || capturingPhoto
 
     readonly property bool hasFocusModes:
         availableFocusModes.length > 0
@@ -116,6 +119,15 @@ Singleton {
 
     readonly property bool cameraAvailable:
         mediaDevices.videoInputs.length > 0
+
+    /** Resolve the selected Qt camera identifier to a Linux V4L2 node. */
+    function v4l2DevicePath() {
+        var deviceId = camera.cameraDevice ? String(camera.cameraDevice.id || "") : ""
+        return CameraDevices.v4l2Path(deviceId)
+    }
+
+    // Exposed as read-only state so lifecycle transitions can be regression-tested.
+    readonly property bool manualControlsQueued: manualControlTimer.running
 
     Timer {
         id: formatRefreshTimer
@@ -218,6 +230,15 @@ Singleton {
         onRecorderStateChanged: {
             root.videoRecording =
                 recorder.recorderState === MediaRecorder.RecordingState
+
+            if (root.videoRecording) {
+                root.startingVideo = false
+                if (root.cameraStopPending)
+                    root.stopVideo()
+            } else {
+                root.startingVideo = false
+                root.finishPendingCameraStop()
+            }
         }
 
         onActualLocationChanged: {
@@ -226,12 +247,14 @@ Singleton {
         }
 
         onErrorOccurred: function(error, errorString) {
+            root.startingVideo = false
             console.error("Camera video error:", errorString)
+            root.finishPendingCameraStop()
         }
     }
 
     CaptureSession {
-        id: captureSession
+        id: captureSessionObject
 
         camera: camera
         imageCapture: imageCapture
@@ -239,7 +262,9 @@ Singleton {
         audioInput: audioInput
     }
 
-    readonly property var captureSession: captureSession
+    // Export the session object for Recorder.qml's VideoOutput binding. Keep
+    // the internal QML id distinct from the property name to avoid self-binding.
+    readonly property var captureSession: captureSessionObject
 
     // -----------------------------------------------------------------
     // Directory / capture process
@@ -252,17 +277,31 @@ Singleton {
         property string pendingFile: ""
 
         onExited: function(exitCode) {
+            var action = pendingAction
+            var file = pendingFile
+            pendingAction = ""
+            pendingFile = ""
+
             if (exitCode !== 0) {
                 root.capturingPhoto = false
+                root.startingVideo = false
                 console.error("Could not create camera directory")
+                root.finishPendingCameraStop()
                 return
             }
 
-            if (pendingAction === "photo") {
-                imageCapture.captureToFile(pendingFile)
-            } else if (pendingAction === "video") {
+            if (action === "photo") {
+                imageCapture.captureToFile(file)
+            } else if (action === "video") {
+                // Closing the UI while mkdir is in flight cancels the pending
+                // start instead of starting a recording against a closed camera.
+                if (root.cameraStopPending || !root.cameraActive) {
+                    root.startingVideo = false
+                    root.finishPendingCameraStop()
+                    return
+                }
                 root.applyCodec()
-                recorder.outputLocation = "file://" + pendingFile
+                recorder.outputLocation = "file://" + file
                 recorder.record()
             }
         }
@@ -452,10 +491,12 @@ Singleton {
     }
 
     function rebuildZoom() {
-        availableZoom = []
+        var next = []
 
-        if (!hasZoom)
+        if (!hasZoom) {
+            availableZoom = next
             return
+        }
 
         var max = Number(camera.maximumZoomFactor)
         var candidates = [1.0, 1.25, 1.5, 2.0, 3.0, 4.0, 5.0, 6.0, 8.0]
@@ -464,16 +505,17 @@ Singleton {
             var z = candidates[i]
 
             if (z >= camera.minimumZoomFactor && z <= max + 0.0001) {
-                availableZoom.push({
+                next.push({
                     label: z.toFixed(2).replace(/0+$/, "").replace(/\.$/, "") + "×",
                     value: z
                 })
             }
         }
+        availableZoom = next
     }
 
     function rebuildFocusModes() {
-        availableFocusModes = []
+        var next = []
 
         var modes = [
             { label: "Auto", value: "auto", mode: Camera.FocusModeAuto },
@@ -489,15 +531,16 @@ Singleton {
 
             try {
                 if (camera.isFocusModeSupported(m.mode))
-                    availableFocusModes.push(m)
+                    next.push(m)
             } catch (e) {
                 console.error("Focus capability query failed:", e)
             }
         }
+        availableFocusModes = next
     }
 
     function rebuildWhiteBalances() {
-        availableWhiteBalances = []
+        var next = []
 
         var modes = [
             { label: "Auto", value: "auto", mode: Camera.WhiteBalanceAuto },
@@ -515,11 +558,12 @@ Singleton {
 
             try {
                 if (camera.isWhiteBalanceModeSupported(m.mode))
-                    availableWhiteBalances.push(m)
+                    next.push(m)
             } catch (e) {
                 console.error("White-balance capability query failed:", e)
             }
         }
+        availableWhiteBalances = next
     }
 
     function refreshCapabilities() {
@@ -1203,25 +1247,47 @@ Singleton {
         if (!cameraAvailable)
             return
 
+        // A rapid reopen cancels a deferred close while an existing capture
+        // finishes; it must not later close the camera underneath the UI.
+        cameraStopPending = false
+
         if (cameraActive)
             return
 
         cameraActive = true
         exposureModeName = "auto"
         manualGain = 0
-        manualControlTimer.restart()
     }
 
     function stopCamera() {
-        if (videoRecording)
-            stopVideo()
+        // Do not let a debounced write from the previous camera session run
+        // after the camera is closed and then quickly reopened.
+        manualControlTimer.stop()
 
+        if (CameraDevices.shouldDeferCameraStop(videoRecording, capturingPhoto, startingVideo)) {
+            cameraStopPending = true
+            if (videoRecording)
+                stopVideo()
+            return
+        }
+
+        cameraStopPending = false
+        cameraActive = false
+    }
+
+    function finishPendingCameraStop() {
+        if (!CameraDevices.shouldFinishPendingCameraStop(
+                cameraStopPending, videoRecording, capturingPhoto, startingVideo))
+            return
+
+        cameraStopPending = false
         cameraActive = false
     }
 
     function takePhoto() {
         if (!cameraActive ||
             capturingPhoto ||
+            startingVideo ||
             videoRecording)
             return
 
@@ -1239,7 +1305,7 @@ Singleton {
     }
 
     function startVideo() {
-        if (!cameraActive || videoRecording)
+        if (!cameraActive || videoRecording || startingVideo || capturingPhoto)
             return
 
         var file =
@@ -1249,6 +1315,7 @@ Singleton {
             ".mp4"
 
         currentFile = file
+        startingVideo = true
         ensureDir("video", file)
     }
 
@@ -1267,10 +1334,13 @@ Singleton {
         if (cameraActive) {
             exposureModeName = "auto"
             manualGain = 0
-            manualControlTimer.restart()
             Qt.callLater(root.scheduleFormatRefresh)
         }
     }
+
+    onVideoRecordingChanged: root.finishPendingCameraStop()
+    onCapturingPhotoChanged: root.finishPendingCameraStop()
+    onStartingVideoChanged: root.finishPendingCameraStop()
 
     onSelectedResolutionChanged: {
         if (selectedResolution.length > 0)
@@ -1310,16 +1380,22 @@ Singleton {
                 return
             }
 
+            var devicePath = root.v4l2DevicePath()
+            if (!devicePath) {
+                console.warn("CameraRec: selected camera has no resolvable V4L2 path; skipping manual controls")
+                return
+            }
+
             if (root.exposureModeName === "auto") {
                 manualControlProc.command = [
                     "v4l2-ctl",
-                    "-d", "/dev/video0",
+                    "-d", devicePath,
                     "--set-ctrl=auto_exposure=3,gain=0"
                 ]
             } else {
                 manualControlProc.command = [
                     "v4l2-ctl",
-                    "-d", "/dev/video0",
+                    "-d", devicePath,
                     "--set-ctrl=auto_exposure=1,exposure_dynamic_framerate=0,exposure_time_absolute="
                         + root.manualExposureAbsolute
                         + ",gain=" + root.manualGain

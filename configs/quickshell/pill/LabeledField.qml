@@ -106,6 +106,8 @@ Item {
                     var cb = (p) => { if (p && p.length > 0) { input.text = p; root.committed(p); } };
                     if (root.browse === "folder")
                         AppLauncher.pickFolder(cb);
+                    else if (root.browse === "qml")
+                        AppLauncher.pickFile(cb, "Select QML entry file");
                     else
                         AppLauncher.pickFile(cb);
                 }

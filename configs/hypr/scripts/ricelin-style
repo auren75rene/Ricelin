@@ -1,0 +1,368 @@
+#!/bin/sh
+#
+# ricelin-style: the list of styles (extra Quickshell setups such as Persona) and
+# the switch between them. The pill's Styles surface and the login autostart call
+# this; it starts and stops instances through qs-toggle.
+#
+#   ricelin-style list             one line per style: id, name, state, note (tab separated)
+#   ricelin-style current          id of the running style, or "ricelin" when none runs
+#   ricelin-style switch <id>      stop every other style, start <id>, remember it
+#   ricelin-style switch ricelin   same as "off"
+#   ricelin-style toggle <id>      start it if stopped, stop it if running
+#   ricelin-style off              stop every style and forget the choice
+#   ricelin-style apply            at login: start the style that was last chosen
+#   ricelin-style add <id> <name> <config|path> <target> [note]
+#                                   register an external style for the pill
+#
+# A style is one Quickshell config that runs on top of Ricelin. Two places supply
+# them:
+#
+#   * Every folder in ~/.config/quickshell that holds a shell.qml, apart from
+#     Ricelin's own (pill, launcher, lock). A trailing "-Quickshell" is dropped
+#     from the name, so Persona-Quickshell becomes the style "persona".
+#   * RICELIN_PERSONA_DIR (default ~/.config/quickshell/Persona-Quickshell) is
+#     also registered as "persona", even when the config lives elsewhere. This
+#     is the same path used by "qs-toggle persona".
+#   * ~/.config/ricelin/styles/<id>.conf, for any setup that lives elsewhere:
+#
+#         name=Persona
+#         config=~/dotfiles/persona/quickshell      (a config folder), or
+#         path=~/dotfiles/persona/main.qml          (a single entry file)
+#         note=Shown under the name in the pill
+#
+#     A .conf file wins over a discovered folder or the configured Persona path.
+#     The files are read as plain text, never run as shell.
+#
+# Replacing Ricelin's own pill and dock with another setup is not done here yet;
+# a style runs alongside them.
+
+have() { command -v "$1" >/dev/null 2>&1; }
+note() { printf 'ricelin-style: %s\n' "$*" >&2; }
+
+usage() {
+    cat >&2 <<'EOF'
+usage: ricelin-style list
+       ricelin-style current
+       ricelin-style switch <id|ricelin>
+       ricelin-style toggle <id>
+       ricelin-style off
+       ricelin-style apply
+       ricelin-style add <id> <name> <config|path> <target> [note]
+EOF
+    exit 2
+}
+
+cfg_home="${XDG_CONFIG_HOME:-$HOME/.config}"
+state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/ricelin"
+state_file="$state_dir/style"
+conf_dir="$cfg_home/ricelin/styles"
+qs_dir="$cfg_home/quickshell"
+here="$(cd "$(dirname "$0")" && pwd)"
+qs_toggle="${RICELIN_QS_TOGGLE:-$here/qs-toggle.sh}"
+
+# ~/x -> $HOME/x
+expand() {
+    case "$1" in
+        "~") printf '%s\n' "$HOME" ;;
+        "~/"*) printf '%s/%s\n' "$HOME" "${1#"~/"}" ;;
+        *) printf '%s\n' "$1" ;;
+    esac
+}
+
+# Keep the menu's Persona entry pointed at the same path as qs-toggle persona,
+# including when a user keeps that config outside ~/.config/quickshell.
+persona_dir="$(expand "${RICELIN_PERSONA_DIR:-$HOME/.config/quickshell/Persona-Quickshell}")"
+
+valid_id() {
+    case "$1" in
+        "" | *[!a-z0-9._-]*) return 1 ;;
+        *) return 0 ;;
+    esac
+}
+
+# "Persona-Quickshell" -> "persona"
+slug() {
+    printf '%s' "$1" | tr 'A-Z' 'a-z' | sed 's/-quickshell$//; s/[^a-z0-9._-]/-/g'
+}
+
+# conf_value <file> <key>: the last "key=value" line, value as written.
+conf_value() {
+    v=""
+    while IFS= read -r line || [ -n "$line" ]; do
+        case "$line" in
+            "$2="*) v="${line#"$2="}" ;;
+        esac
+    done <"$1"
+    printf '%s\n' "$v"
+}
+
+# Every style id, conf files first, then discovered folders, each once.
+all_ids() {
+    seen=" "
+    if [ -d "$conf_dir" ]; then
+        for f in "$conf_dir"/*.conf; do
+            [ -f "$f" ] || continue
+            id="${f##*/}"
+            id="${id%.conf}"
+            valid_id "$id" || continue
+            case "$seen" in *" $id "*) continue ;; esac
+            seen="$seen$id "
+            printf '%s\n' "$id"
+        done
+    fi
+    # Persona has a dedicated override used by qs-toggle persona. Register it
+    # before generic folders so the explicit path always wins for this id.
+    if [ -f "$persona_dir/shell.qml" ]; then
+        id=persona
+        case "$seen" in
+            *" $id "*) ;;
+            *) seen="$seen$id "; printf '%s\n' "$id" ;;
+        esac
+    fi
+    if [ -d "$qs_dir" ]; then
+        for d in "$qs_dir"/*/; do
+            [ -f "${d}shell.qml" ] || continue
+            base="${d%/}"
+            base="${base##*/}"
+            case "$base" in pill | launcher | lock | pill-recovery-*) continue ;; esac
+            id="$(slug "$base")"
+            valid_id "$id" || continue
+            case "$seen" in *" $id "*) continue ;; esac
+            seen="$seen$id "
+            printf '%s\n' "$id"
+        done
+    fi
+}
+
+# Sets kind (config|path), target, label and blurb for an id; fails if unknown.
+resolve() {
+    kind=""
+    target=""
+    label=""
+    blurb=""
+    valid_id "$1" || return 1
+    f="$conf_dir/$1.conf"
+    if [ -f "$f" ]; then
+        c="$(conf_value "$f" config)"
+        p="$(conf_value "$f" path)"
+        if [ -n "$c" ]; then
+            kind=config
+            target="$(expand "$c")"
+        elif [ -n "$p" ]; then
+            kind=path
+            target="$(expand "$p")"
+        else
+            return 1
+        fi
+        label="$(conf_value "$f" name)"
+        blurb="$(conf_value "$f" note)"
+        [ -n "$label" ] || label="$1"
+        return 0
+    fi
+    # An explicit Persona path takes precedence over a same-id folder under
+    # ~/.config/quickshell; .conf files above still take precedence over both.
+    if [ "$1" = persona ] && [ -f "$persona_dir/shell.qml" ]; then
+        kind=config
+        target="$persona_dir"
+        label=Persona
+        return 0
+    fi
+    for d in "$qs_dir"/*/; do
+        [ -f "${d}shell.qml" ] || continue
+        base="${d%/}"
+        base="${base##*/}"
+        case "$base" in pill | launcher | lock | pill-recovery-*) continue ;; esac
+        if [ "$(slug "$base")" = "$1" ]; then
+            kind=config
+            target="${d%/}"
+            label="$(printf '%s' "$base" | sed 's/-[Qq]uickshell$//')"
+            return 0
+        fi
+    done
+    return 1
+}
+
+is_running() { "$qs_toggle" --status "$kind" "$target" >/dev/null 2>&1; }
+
+start_style() {
+    resolve "$1" || { note "unknown style: $1"; return 1; }
+    "$qs_toggle" --start "$kind" "$target"
+}
+
+stop_style() {
+    resolve "$1" || return 0
+    "$qs_toggle" --stop "$kind" "$target"
+}
+
+remember() {
+    mkdir -p "$state_dir" 2>/dev/null
+    printf '%s\n' "$1" >"$state_file" 2>/dev/null
+}
+
+forget() { rm -f "$state_file" 2>/dev/null; }
+
+stop_all_except() {
+    for other_id in $(all_ids); do
+        [ "$other_id" = "$1" ] && continue
+        stop_style "$other_id"
+    done
+}
+
+cmd_list() {
+    for id in $(all_ids); do
+        resolve "$id" || continue
+        if is_running; then st=running; else st=stopped; fi
+        printf '%s\t%s\t%s\t%s\n' "$id" "$label" "$st" "$blurb"
+    done
+}
+
+# Register an external Quickshell folder or entry file, without executing its
+# contents. Values are stored as plain text in a .conf file and never sourced.
+cmd_add() {
+    [ "$#" -ge 4 ] && [ "$#" -le 5 ] || usage
+    new_id="$1"
+    new_name="$2"
+    new_kind="$3"
+    raw_target="$4"
+    new_note="${5:-}"
+
+    valid_id "$new_id" || { reject_add "Invalid style ID" "Use lowercase letters, digits, dot, underscore or hyphen."; return 1; }
+    case "$new_id" in . | ..) reject_add "Invalid style ID" "'.' and '..' are not valid IDs."; return 1 ;; esac
+    case "$new_id" in ricelin | pill | launcher | lock | pill-recovery-*) reject_add "Reserved style ID" "'$new_id' cannot be registered as an extra style."; return 1 ;; esac
+    [ -n "$new_name" ] || { reject_add "Missing style name" "Enter a display name."; return 1; }
+    case "$new_kind" in config | path) ;; *) reject_add "Invalid style type" "Choose a config folder or an entry file."; return 1 ;; esac
+
+    tab="$(printf '\t')"
+    nl='
+'
+    cr="$(printf '\r')"
+    for value in "$new_id" "$new_name" "$raw_target" "$new_note"; do
+        case "$value" in
+            *"$tab"* | *"$nl"* | *"$cr"*)
+                reject_add "Invalid style details" "Names, IDs, paths and notes must fit on one line."
+                return 1
+                ;;
+        esac
+    done
+
+    new_target="$(expand "$raw_target")"
+    case "$new_target" in
+        /*) ;;
+        *) reject_add "Style path must be absolute" "Choose a path with Browse, or use an absolute path or ~/…."; return 1 ;;
+    esac
+    if [ "$new_kind" = config ]; then
+        [ -d "$new_target" ] && [ -f "$new_target/shell.qml" ] || {
+            reject_add "Not a Quickshell config folder" "$new_target must be a directory containing shell.qml."
+            return 1
+        }
+    else
+        [ -f "$new_target" ] || {
+            reject_add "Style entry file not found" "$new_target does not exist or is not a file."
+            return 1
+        }
+    fi
+
+    # A .conf already wins over discovered folders, so don't silently replace
+    # one; likewise don't shadow an automatically discovered style.
+    if resolve "$new_id"; then
+        reject_add "Style already exists" "'$new_id' is already registered or auto-discovered."
+        return 1
+    fi
+
+    mkdir -p "$conf_dir" || { reject_add "Cannot register style" "Could not create $conf_dir."; return 1; }
+    file="$conf_dir/$new_id.conf"
+    tmp="$conf_dir/.$new_id.conf.$$"
+    [ ! -e "$file" ] && [ ! -e "$tmp" ] || {
+        reject_add "Style already exists" "A registration file for '$new_id' already exists."
+        return 1
+    }
+
+    ( umask 077; printf 'name=%s\n%s=%s\nnote=%s\n' "$new_name" "$new_kind" "$new_target" "$new_note" >"$tmp" ) || {
+        rm -f "$tmp"
+        reject_add "Cannot register style" "Could not write the registration file."
+        return 1
+    }
+    mv "$tmp" "$file" || {
+        rm -f "$tmp"
+        reject_add "Cannot register style" "Could not finalize the registration file."
+        return 1
+    }
+
+    note "registered style '$new_id' ($new_name)"
+    have notify-send && notify-send -u normal -a Ricelin "Style added" "$new_name is now available in Styles & Persona."
+    return 0
+}
+
+reject_add() {
+    note "$1: $2"
+    have notify-send && notify-send -u normal -a Ricelin "$1" "$2"
+    return 1
+}
+
+cmd_current() {
+    for id in $(all_ids); do
+        resolve "$id" || continue
+        if is_running; then
+            printf '%s\n' "$id"
+            return 0
+        fi
+    done
+    printf 'ricelin\n'
+}
+
+cmd_switch() {
+    id="${1:-}"
+    [ -n "$id" ] || usage
+    if [ "$id" = ricelin ]; then
+        cmd_off
+        return
+    fi
+    resolve "$id" || { note "unknown style: $id"; return 1; }
+    stop_all_except "$id"
+    start_style "$id" || return 1
+    remember "$id"
+}
+
+cmd_toggle() {
+    id="${1:-}"
+    [ -n "$id" ] || usage
+    resolve "$id" || {
+        note "unknown style: $id"
+        have notify-send && notify-send -u normal -a Ricelin "No style called $id" \
+            "Put its Quickshell folder in $qs_dir, or describe it in $conf_dir/$id.conf."
+        return 1
+    }
+    if is_running; then
+        stop_style "$id"
+        forget
+    else
+        cmd_switch "$id"
+    fi
+}
+
+cmd_off() {
+    stop_all_except ""
+    forget
+}
+
+cmd_apply() {
+    [ -r "$state_file" ] || return 0
+    IFS= read -r id <"$state_file"
+    [ -n "$id" ] || return 0
+    resolve "$id" || return 0
+    is_running && return 0
+    start_style "$id"
+}
+
+cmd="${1:-}"
+[ "$#" -gt 0 ] && shift
+case "$cmd" in
+    list)    cmd_list ;;
+    current) cmd_current ;;
+    switch)  cmd_switch "$@" ;;
+    toggle)  cmd_toggle "$@" ;;
+    off)     cmd_off ;;
+    apply)   cmd_apply ;;
+    add)     cmd_add "$@" ;;
+    *)       usage ;;
+esac

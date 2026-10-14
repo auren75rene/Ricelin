@@ -2,6 +2,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import "../lib/recorderprocess.js" as RecorderProcess
 
 /**
  * Screen-recorder backend, shared by the 録 RECORD surface, the pill's hover
@@ -67,6 +68,8 @@ Singleton {
     onDesktopOnChanged: Flags.recordDesktop = desktopOn
 
     property bool recording: false
+    // True only for the recorder process owned by this singleton.
+    readonly property bool canStop: recProc.running && Number(recProc.processId) > 1
     property bool recorderOpen: false
     property string currentFile: ""
     property var recent: []
@@ -205,7 +208,7 @@ Singleton {
      * the surface and the resolvers never stack a second pick on a busy backend.
      */
     readonly property bool picking: windowProc.running
-    readonly property bool busy: recording || recProc.running || picking
+    readonly property bool busy: recording || recProc.running || mkdirProc.running || picking || counting
 
     /**
      * Resolve a whole-screen target synchronously to a monitor connector name
@@ -269,7 +272,7 @@ Singleton {
      * directory exists, then launches gsr.
      */
     function start(captureToken) {
-        if (recording || recProc.running)
+        if (!RecorderProcess.canStart(recording, recProc.running, mkdirProc.running, captureToken))
             return;
         var file = outDir + "/recording_" + timestamp() + ".mp4";
         mkdirProc.command = ["mkdir", "-p", outDir];
@@ -281,7 +284,21 @@ Singleton {
     function stop() {
         if (!recording)
             return;
-        stopProc.command = ["pkill", "-SIGINT", "-f", "(^|/)gpu-screen-recorder"];
+
+        // Never pkill by executable name: that can stop unrelated recorder
+        // processes. Signal only the PID belonging to our live Process object.
+        var command = RecorderProcess.interruptCommand(recProc.processId);
+        if (!recProc.running || command.length === 0) {
+            console.warn("ScreenRec: refusing to stop a recorder started outside Ricelin");
+            Quickshell.execDetached([
+                "notify-send", "-a", "Ricelin", "-u", "normal",
+                "External recording",
+                "Stop this recording in the application that started it."
+            ]);
+            return;
+        }
+
+        stopProc.command = command;
         stopProc.running = true;
     }
 
@@ -379,9 +396,22 @@ Singleton {
         id: mkdirProc
         property string pendingToken: ""
         property string pendingFile: ""
-        onExited: {
+        onExited: function(exitCode) {
+            if (!RecorderProcess.directoryReady(exitCode)) {
+                var failedDirectory = root.outDir;
+                pendingToken = "";
+                pendingFile = "";
+                console.error("ScreenRec: could not create recording directory:", failedDirectory);
+                failProc.command = ["notify-send", "-a", "Ricelin", "-u", "critical",
+                    "Recording failed", "Could not create recording directory: " + failedDirectory];
+                failProc.running = true;
+                return;
+            }
+
             root.currentFile = pendingFile;
             recProc.command = root.buildArgs(pendingToken, pendingFile);
+            pendingToken = "";
+            pendingFile = "";
             recProc.running = true;
         }
     }

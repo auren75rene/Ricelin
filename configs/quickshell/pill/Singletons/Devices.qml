@@ -129,11 +129,15 @@ Singleton {
         stdout: StdioCollector {
             onStreamFinished: {
                 var mons = [];
-                var blocks = this.text.split(/\bDisplay \d+/);
-                for (var i = 0; i < blocks.length; i++) {
-                    var bus = /I2C bus:\s+\/dev\/i2c-(\d+)/.exec(blocks[i]);
-                    var conn = /DRM connector:\s+card\d+-(\S+)/.exec(blocks[i]);
-                    if (bus && !/Invalid display/.test(blocks[i]))
+                var sections = this.text.split(/(\bDisplay\s+\d+|\bInvalid display\b)/i);
+                for (var i = 1; i < sections.length; i += 2) {
+                    var heading = sections[i] || "";
+                    if (!/^Display\s+\d+$/i.test(heading))
+                        continue;
+                    var block = sections[i + 1] || "";
+                    var bus = /I2C bus:\s+\/dev\/i2c-(\d+)/i.exec(block);
+                    var conn = /DRM connector:\s+card\d+-(\S+)/i.exec(block);
+                    if (bus)
                         mons.push({ bus: bus[1], label: conn ? conn[1] : "BUS " + bus[1] });
                 }
                 root.ddcMonitors = mons;

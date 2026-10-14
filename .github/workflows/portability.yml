@@ -6,15 +6,62 @@ on:
 
 jobs:
   checks:
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: No init-specific calls outside ricelin-sys
         run: sh tools/lint-init-calls.sh
+      - name: QML singleton registration self-check
+        run: sh tests/test_qml_singletons.sh
       - name: ricelin-sys self-check
         run: sh tests/test_ricelin_sys.sh
+      - name: qs-toggle self-check
+        run: sh tests/test_qs_toggle.sh
+      - name: ricelin-style self-check
+        run: sh tests/test_ricelin_style.sh
+      - name: Styles UI deploy self-check
+        run: sh tests/test_deploy_style_ui.sh
+      - name: Blade, dock and desktop-entry logic
+        run: |
+          node tests/test_blades.js
+          node tests/test_dock.js
+          node tests/test_styles_ui.js
+          node tests/test_desktopentry.js
+          node tests/test_cameradevices.js
+          node tests/test_recorderprocess.js
+      - name: prefix manager safety self-check
+        run: sh tests/test_ricelin_prefix.sh
+      - name: application registry parser self-check
+        run: node tests/test_app_registry_store.js
+      - name: Deployment installer self-check
+        run: python3 installer/deploy.py
       - name: Shell syntax
         run: |
           sh -n configs/hypr/scripts/ricelin-sys
+          sh -n configs/hypr/scripts/ricelin-prefix
+          sh -n tests/test_ricelin_prefix.sh
+          sh -n tests/test_qml_singletons.sh
+          sh -n tests/test_qml_runtime.sh
           sh -n tools/lint-init-calls.sh
           sh -n tests/test_ricelin_sys.sh
+          sh -n configs/hypr/scripts/qs-toggle.sh
+          sh -n tests/test_qs_toggle.sh
+          sh -n configs/hypr/scripts/ricelin-style
+          sh -n tools/deploy-style-ui.sh
+          sh -n tests/test_deploy_style_ui.sh
+          sh -n tests/test_ricelin_style.sh
+
+  qml-runtime:
+    name: Headless Quickshell runtime smoke
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    permissions:
+      contents: read
+    steps:
+      - name: Install Quickshell, Qt Multimedia, and Git
+        run: pacman -Syu --noconfirm --needed git quickshell qt6-multimedia
+      - uses: actions/checkout@v4
+      - name: Run headless QML runtime smoke
+        run: sh tests/test_qml_runtime.sh

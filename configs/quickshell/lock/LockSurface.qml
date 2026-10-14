@@ -317,14 +317,25 @@ Item {
      * The source is the already reconstructed/blurred desktop. This adds
      * only a barely visible vignette and static grain; it does not animate.
      */
+    // Shader samplers require a texture provider, not a plain Item. Render the
+    // reconstructed blur stack into a texture only for the sleep-lock effect.
+    ShaderEffectSource {
+        id: sleepAtmosphereSource
+        anchors.fill: parent
+        sourceItem: blurLayer.item
+        live: surface.sleepLock
+        hideSource: surface.sleepLock
+        visible: false
+    }
+
     ShaderEffect {
         id: sleepAtmosphere
 
         anchors.fill: parent
-        visible: surface.sleepLock
+        visible: surface.sleepLock && blurLayer.status === Loader.Ready
         z: 100
 
-        property var source: blurLayer.item
+        property var source: sleepAtmosphereSource
 
         fragmentShader:
             "shaders/sleep-atmosphere.frag.qsb"

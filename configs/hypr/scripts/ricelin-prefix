@@ -1,0 +1,423 @@
+#!/bin/sh
+# Ricelin prefix operations. Destructive operations fail closed: only paths
+# that are demonstrably dedicated Wine/Proton prefixes may be reset or removed.
+set -eu
+
+have() { command -v "$1" >/dev/null 2>&1; }
+
+notice() {
+    message=$1
+    printf 'ricelin-prefix: %s\n' "$message" >&2
+    if [ "${RICELIN_PREFIX_NO_NOTIFY:-0}" != 1 ] && have notify-send; then
+        notify-send -u critical -a Ricelin "Prefix operation blocked" "$message" >/dev/null 2>&1 || true
+    fi
+}
+
+fail() { notice "$*"; exit 1; }
+usage() {
+    echo 'usage: ricelin-prefix <create|reset|remove|open|winetricks|clone> ...' >&2
+    exit 2
+}
+
+# Expand the shell's common ~/ spelling ourselves because the caller passes each
+# argument literally (no shell expansion occurs when QML invokes this helper).
+canonicalize() {
+    input=$1
+    [ -n "$input" ] || fail 'No prefix path was configured.'
+    case "$input" in
+        '~') input=${HOME:?HOME is not set} ;;
+        '~/'*) input=${HOME:?HOME is not set}${input#\~} ;;
+    esac
+    case "$input" in
+        /*) ;;
+        *) fail "Refusing relative prefix path: $input" ;;
+    esac
+    # A final symlink is ambiguous: deleting its canonical target is not the
+    # same operation as deleting the selected link, so require users to resolve it.
+    # A path ending in a slash or "/." can hide a final symlink from -L.
+    # Remove only those trailing aliases before checking; preserve the original
+    # input for realpath so canonicalization semantics remain unchanged.
+    link_probe=$input
+    while :; do
+        case "$link_probe" in
+            /) break ;;
+            */) link_probe=${link_probe%/} ;;
+            */.) link_probe=${link_probe%/.} ;;
+            *) break ;;
+        esac
+    done
+    [ ! -L "$link_probe" ] || fail "Refusing a symlink as the prefix path: $input"
+    have realpath || fail 'The realpath utility is required for safe prefix operations.'
+    realpath -m -- "$input" || fail "Could not canonicalize prefix path: $input"
+}
+
+strictly_below() {
+    case "$1" in "$2"/*) return 0 ;; *) return 1 ;; esac
+}
+
+paths_overlap() {
+    [ "$1" = "$2" ] && return 0
+    strictly_below "$1" "$2" && return 0
+    strictly_below "$2" "$1" && return 0
+    return 1
+}
+
+assert_safe_target() {
+    candidate=$1
+    app_executable=$2
+    app_workdir=$3
+    home_real=$(realpath -m -- "${HOME:?HOME is not set}") || fail 'Could not resolve HOME.'
+
+    [ "$candidate" != '/' ] || fail 'Refusing to operate on the filesystem root.'
+    [ "$candidate" != "$home_real" ] || fail 'Refusing to operate on HOME itself.'
+    case "$home_real" in
+        "$candidate"/*) fail "Refusing a path that contains HOME: $candidate" ;;
+    esac
+
+    for app_path in "$app_executable" "$app_workdir"; do
+        [ -n "$app_path" ] || continue
+        case "$app_path" in
+            /*) app_real=$(realpath -m -- "$app_path") || fail "Could not resolve app path: $app_path" ;;
+            *) continue ;;
+        esac
+        if paths_overlap "$candidate" "$app_real"; then
+            fail "Prefix overlaps the app executable or working directory: $candidate"
+        fi
+    done
+}
+
+is_empty_directory() {
+    [ -d "$1" ] || return 1
+    command -v find >/dev/null 2>&1 || return 1
+    first_entry=$(find "$1" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null) || return 1
+    [ -z "$first_entry" ]
+}
+
+# Recognize a prefix created by Ricelin or a conventional pre-existing Wine /
+# Proton prefix. Merely pointing the field at an arbitrary non-empty directory
+# does not make that directory eligible for recursive deletion.
+is_prefix_directory() {
+    directory=$1
+    marker="$directory/.ricelin-prefix"
+    # A filename alone is not proof of ownership: otherwise any unrelated
+    # directory containing a file with this name could be recursively deleted.
+    if [ -f "$marker" ] && [ ! -L "$marker" ] &&
+        [ "$(cat -- "$marker" 2>/dev/null)" = 'Ricelin-managed Wine/Proton prefix' ]; then
+        return 0
+    fi
+    # Continue to recognize conventional, pre-existing Wine/Proton prefixes.
+    [ -d "$directory/drive_c" ] &&
+        [ -d "$directory/dosdevices" ] &&
+        [ -f "$directory/system.reg" ] &&
+        [ -f "$directory/user.reg" ]
+}
+
+mark_prefix() {
+    # Write into a fresh file and atomically rename it over the marker. A clone
+    # may contain a marker symlink; redirection directly to that path would
+    # follow it and overwrite an unrelated file outside the prefix.
+    directory=$1
+    marker="$directory/.ricelin-prefix"
+    temporary=$(mktemp -- "$directory/.ricelin-prefix.tmp.XXXXXXXX") ||
+        fail "Could not create a temporary prefix marker: $directory"
+    if ! (umask 077; printf 'Ricelin-managed Wine/Proton prefix\n' > "$temporary"); then
+        rm -f -- "$temporary" || true
+        fail "Could not write the prefix marker: $directory"
+    fi
+    if ! mv -fT -- "$temporary" "$marker"; then
+        rm -f -- "$temporary" || true
+        fail "Could not install the prefix marker: $directory"
+    fi
+}
+
+require_existing_or_empty() {
+    directory=$1
+    operation=$2
+    if [ -L "$directory" ]; then
+        fail "Refusing a symlink as the prefix path: $directory"
+    fi
+    if [ -e "$directory" ]; then
+        [ -d "$directory" ] || fail "Prefix path is not a directory: $directory"
+        if is_empty_directory "$directory"; then
+            return 0
+        fi
+        if is_prefix_directory "$directory"; then
+            return 0
+        fi
+        fail "Refusing to $operation an unrecognized, non-empty directory: $directory"
+    fi
+}
+
+validate_runner() {
+    case "$1" in
+        umu|wine|wine-staging) ;;
+        *) fail "Prefix operations require a Wine or UMU runner; got: $1" ;;
+    esac
+}
+
+preflight_runner() {
+    validate_runner "$1"
+    if [ "$1" != 'umu' ]; then
+        have wineboot || fail 'wineboot was not found; install Wine before creating or resetting a prefix.'
+    fi
+}
+
+initialize_prefix() {
+    directory=$1
+    runner=$2
+    mkdir -p -- "$directory" || fail "Could not create prefix directory: $directory"
+    if [ "$runner" = 'umu' ]; then
+        mark_prefix "$directory"
+        return 0
+    fi
+    # Defensive duplicate check: reset also preflights before moving the old prefix.
+    have wineboot || fail 'wineboot was not found; install Wine or select UMU.'
+    if ! WINEPREFIX="$directory" WINEARCH=win64 wineboot --init; then
+        fail "wineboot failed for prefix: $directory"
+    fi
+    mark_prefix "$directory"
+}
+
+reset_prefix() {
+    directory=$1
+    runner=$2
+
+    # Missing and empty destinations also use staging, so failed initialization
+    # cannot leave partial Wine data at the final path. A populated prefix is
+    # rebuilt next to the old one and swapped only after initialization succeeds.
+    if [ ! -e "$directory" ]; then
+        create_prefix_staged "$directory" "$runner"
+        return 0
+    fi
+    require_existing_or_empty "$directory" 'reset'
+    if is_empty_directory "$directory"; then
+        create_prefix_staged "$directory" "$runner"
+        return 0
+    fi
+
+    parent=${directory%/*}
+    [ -n "$parent" ] || parent=/
+    base=${directory##*/}
+    stage=$(mktemp -d -- "$parent/.${base}.ricelin-reset.XXXXXXXX") ||
+        fail "Could not stage a replacement prefix beside: $directory"
+
+    # The original stays untouched unless the replacement prefix initializes
+    # successfully. Run in a subshell so fail() cannot terminate this cleanup path.
+    if ( initialize_prefix "$stage" "$runner" ); then
+        :
+    else
+        rm -rf -- "$stage" || true
+        fail "Could not initialize a clean prefix; the original was left untouched: $directory"
+    fi
+
+    backup="$parent/.${base}.ricelin-old-$$-$(date +%s)"
+    suffix=0
+    while [ -e "$backup" ] || [ -L "$backup" ]; do
+        suffix=$((suffix + 1))
+        backup="$parent/.${base}.ricelin-old-$$-$(date +%s)-$suffix"
+    done
+
+    if ! mv -T -- "$directory" "$backup"; then
+        rm -rf -- "$stage" || true
+        fail "Could not move the old prefix safely; it was left untouched: $directory"
+    fi
+
+    if mv -T -- "$stage" "$directory"; then
+        if ! rm -rf -- "$backup"; then
+            notice "Reset succeeded, but the old prefix could not be removed and remains at: $backup"
+        fi
+        return 0
+    fi
+
+    if mv -T -- "$backup" "$directory"; then
+        rm -rf -- "$stage" || true
+        fail "Could not install the replacement prefix; the original was restored: $directory"
+    fi
+
+    rm -rf -- "$stage" || true
+    fail "Prefix swap and automatic restore both failed; original data is retained at: $backup"
+}
+
+create_prefix_staged() {
+    directory=$1
+    runner=$2
+    parent=${directory%/*}
+    [ -n "$parent" ] || parent=/
+    base=${directory##*/}
+
+    mkdir -p -- "$parent" || fail "Could not create prefix parent directory: $parent"
+
+    empty_target=0
+    if [ -L "$directory" ]; then
+        fail "Refusing a symlink as the prefix path: $directory"
+    elif [ -e "$directory" ]; then
+        [ -d "$directory" ] || fail "Prefix path is not a directory: $directory"
+        is_empty_directory "$directory" ||
+            fail "Refusing to create over a non-empty directory: $directory (use Reset for an existing prefix)"
+        empty_target=1
+    fi
+
+    stage=$(mktemp -d -- "$parent/.${base}.ricelin-create.XXXXXXXX") ||
+        fail "Could not stage a new prefix beside: $directory"
+    if ( initialize_prefix "$stage" "$runner" ); then
+        :
+    else
+        rm -rf -- "$stage" || true
+        fail "Prefix initialization failed; the final destination was left untouched: $directory"
+    fi
+
+    empty_backup=
+    if [ "$empty_target" -eq 1 ]; then
+        # Re-check just before moving the empty directory aside.
+        is_empty_directory "$directory" || {
+            rm -rf -- "$stage" || true
+            fail "Destination became non-empty while the prefix was being initialized: $directory"
+        }
+        empty_backup="$parent/.${base}.ricelin-empty-$$-$(date +%s)"
+        suffix=0
+        while [ -e "$empty_backup" ] || [ -L "$empty_backup" ]; do
+            suffix=$((suffix + 1))
+            empty_backup="$parent/.${base}.ricelin-empty-$$-$(date +%s)-$suffix"
+        done
+        if ! mv -T -- "$directory" "$empty_backup"; then
+            rm -rf -- "$stage" || true
+            fail "Could not safely move the empty destination aside: $directory"
+        fi
+    fi
+
+    if mv -T -n -- "$stage" "$directory" && [ ! -e "$stage" ] && [ ! -L "$stage" ]; then
+        if [ -n "$empty_backup" ] && ! rmdir -- "$empty_backup"; then
+            notice "Prefix created, but the prior empty directory could not be removed and remains at: $empty_backup"
+        fi
+        return 0
+    fi
+
+    rm -rf -- "$stage" || true
+    if [ -n "$empty_backup" ] && [ -e "$empty_backup" ] && [ ! -e "$directory" ] && [ ! -L "$directory" ]; then
+        if mv -T -n -- "$empty_backup" "$directory" && [ ! -e "$empty_backup" ]; then
+            fail "Could not install the initialized prefix; the original empty directory was restored: $directory"
+        fi
+    fi
+    if [ -n "$empty_backup" ] && { [ -e "$empty_backup" ] || [ -L "$empty_backup" ]; }; then
+        notice "Prefix installation failed; the original empty directory is preserved at: $empty_backup"
+    fi
+    fail "Could not install the initialized prefix without overwriting another path: $directory"
+}
+
+remove_prefix() {
+    directory=$1
+    [ -d "$directory" ] || fail "Prefix does not exist: $directory"
+    is_prefix_directory "$directory" || fail "Refusing to remove a directory that is not a recognized prefix: $directory"
+    rm -rf -- "$directory" || fail "Could not remove prefix: $directory"
+}
+
+cmd=${1:-}
+[ "$#" -gt 0 ] || usage
+shift
+
+case "$cmd" in
+    create|reset|remove|open|winetricks)
+        [ "$#" -eq 4 ] || usage
+        raw_path=$1
+        runner=$2
+        app_executable=$3
+        app_workdir=$4
+        target=$(canonicalize "$raw_path") || exit 1
+        assert_safe_target "$target" "$app_executable" "$app_workdir"
+        case "$cmd" in
+            create)
+                preflight_runner "$runner"
+                create_prefix_staged "$target" "$runner"
+                ;;
+            reset)
+                preflight_runner "$runner"
+                reset_prefix "$target" "$runner"
+                ;;
+            remove)
+                remove_prefix "$target"
+                ;;
+            open)
+                [ -d "$target" ] && is_prefix_directory "$target" ||
+                    fail "Refusing to open a directory that is not a recognized prefix: $target"
+                have xdg-open || fail 'xdg-open is not installed.'
+                if [ -d "$target/drive_c" ]; then
+                    exec xdg-open "$target/drive_c"
+                else
+                    exec xdg-open "$target"
+                fi
+                ;;
+            winetricks)
+                [ -d "$target" ] && is_prefix_directory "$target" ||
+                    fail "Refusing to run winetricks on an unrecognized prefix: $target"
+                have winetricks || fail 'winetricks is not installed.'
+                exec env WINEPREFIX="$target" winetricks
+                ;;
+        esac
+        ;;
+    clone)
+        [ "$#" -eq 5 ] || usage
+        raw_source=$1
+        raw_destination=$2
+        runner=$3
+        app_executable=$4
+        app_workdir=$5
+        validate_runner "$runner"
+        source=$(canonicalize "$raw_source") || exit 1
+        destination=$(canonicalize "$raw_destination") || exit 1
+        assert_safe_target "$source" "$app_executable" "$app_workdir"
+        assert_safe_target "$destination" "$app_executable" "$app_workdir"
+        [ "$source" != "$destination" ] || fail 'Source and destination prefixes are identical.'
+        if paths_overlap "$source" "$destination"; then
+            fail 'Source and destination prefixes must not contain one another.'
+        fi
+        [ -d "$source" ] && is_prefix_directory "$source" ||
+            fail "Source is not a recognized Wine/Proton prefix: $source"
+        parent=${destination%/*}
+        [ -n "$parent" ] || parent=/
+        base=${destination##*/}
+        mkdir -p -- "$parent" || fail "Could not create clone parent directory: $parent"
+
+        destination_preexisting=0
+        if [ -e "$destination" ] || [ -L "$destination" ]; then
+            destination_preexisting=1
+            [ ! -L "$destination" ] || fail "Refusing a symlink clone destination: $destination"
+            [ -d "$destination" ] || fail "Clone destination is not a directory: $destination"
+            is_empty_directory "$destination" ||
+                fail "Refusing to overwrite a non-empty clone destination: $destination"
+        fi
+
+        stage=$(mktemp -d -- "$parent/.${base}.ricelin-clone.XXXXXXXX") ||
+            fail "Could not stage clone beside: $destination"
+
+        # Copy to a sibling staging directory so partial copies never appear
+        # at the final destination. The subshell allows reliable cleanup if
+        # mark_prefix invokes fail().
+        if (cp -a -- "$source/." "$stage/" && mark_prefix "$stage"); then
+            :
+        else
+            rm -rf -- "$stage" || true
+            fail "Clone failed; temporary data was removed: $destination"
+        fi
+
+        if [ "$destination_preexisting" -eq 1 ]; then
+            if [ -L "$destination" ] || [ ! -d "$destination" ] ||
+                ! rmdir -- "$destination"; then
+                rm -rf -- "$stage" || true
+                fail "Clone destination changed or is no longer empty; it was preserved: $destination"
+            fi
+        elif [ -e "$destination" ] || [ -L "$destination" ]; then
+            rm -rf -- "$stage" || true
+            fail "Clone destination appeared during the operation; it was preserved: $destination"
+        fi
+
+        # Don't overwrite a destination created concurrently.
+        if mv -T --no-clobber -- "$stage" "$destination" &&
+            [ ! -e "$stage" ] && [ ! -L "$stage" ]; then
+            :
+        else
+            rm -rf -- "$stage" || true
+            fail "Could not install the completed clone: $destination"
+        fi
+        ;;
+    *) usage ;;
+esac

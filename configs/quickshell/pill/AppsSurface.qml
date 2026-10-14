@@ -13,6 +13,7 @@ PillSurface {
     property string category: "game"
     property string viewState: "list"
     property string selectedId: ""
+    property string restartTargetId: ""
     readonly property var selectedApp: AppRegistry.byId(root.selectedId)
 
     onOpenChanged: if (!open) { root.viewState = "list"; root.selectedId = ""; }
@@ -78,7 +79,7 @@ PillSurface {
                        anchors.fill: parent
                        hoverEnabled: true
                        cursorShape: Qt.PointingHandCursor
-                       onClicked: root.viewState = "scan"
+                       onClicked: { if (!AppRegistry.loadError) root.viewState = "scan" }
                    }
                }
                Rectangle {
@@ -100,7 +101,7 @@ PillSurface {
                        anchors.fill: parent
                        hoverEnabled: true
                        cursorShape: Qt.PointingHandCursor
-                       onClicked: root.viewState = "add"
+                       onClicked: { if (!AppRegistry.loadError) root.viewState = "add" }
                    }
                }
             }
@@ -120,9 +121,40 @@ PillSurface {
             onPicked: (v) => { root.category = v; appsList.currentIndex = AppRegistry.countFor(v) > 0 ? 0 : -1; }
         }
         Item { width: 1; height: visible ? 10 * root.s : 0; visible: root.viewState === "list" }
+       Column {
+           width: parent.width
+           spacing: 6 * root.s
+           visible: root.viewState === "list" && AppRegistry.loadError.length > 0
+           Text {
+               width: parent.width
+               wrapMode: Text.WordWrap
+               text: "The application registry could not be loaded. The existing file has not been overwritten.\n" + AppRegistry.loadError
+               color: Theme.subtle
+               font.family: Theme.font
+               font.pixelSize: 10.5 * root.s
+               lineHeight: 1.25
+           }
+           Button {
+               text: AppRegistry.recovering
+                     ? "Backing up registry…"
+                     : "Back up original and seed defaults"
+               enabled: !AppRegistry.recovering
+               onClicked: AppRegistry.recoverWithDefaults()
+           }
+       }
        Text {
            width: parent.width
-           visible: root.viewState === "list" && AppRegistry.ready && appsList.count === 0
+           visible: root.viewState === "list" && AppRegistry.recoveryStatus.length > 0
+           wrapMode: Text.WordWrap
+           text: AppRegistry.recoveryStatus
+           color: Theme.faint
+           font.family: Theme.font
+           font.pixelSize: 9.5 * root.s
+           lineHeight: 1.2
+       }
+       Text {
+           width: parent.width
+           visible: root.viewState === "list" && AppRegistry.ready && !AppRegistry.loadError && appsList.count === 0
            wrapMode: Text.WordWrap
            text: "Nothing here yet. Use + to add an application, or Scan to discover installed ones."
            color: Theme.faint
@@ -197,8 +229,11 @@ PillSurface {
            onForceStop: AppLauncher.forceStop(root.selectedId)
 
            onRestart: {
-               AppLauncher.stop(root.selectedId)
-               restartTimer.start()
+               root.restartTargetId = root.selectedId;
+               if (!root.restartTargetId)
+                   return;
+               AppLauncher.stop(root.restartTargetId);
+               restartTimer.restart();
            }
 
            onToggleFullscreen: AppRegistry.update(root.selectedId, {
@@ -209,8 +244,18 @@ PillSurface {
 
            Timer {
                id: restartTimer
-               interval: 900
-               onTriggered: AppLauncher.launch(root.selectedId)
+               interval: 250
+               onTriggered: {
+                   var id = root.restartTargetId;
+                   if (!id)
+                       return;
+                   if (AppLauncher.isRunning(id)) {
+                       restartTimer.restart();
+                       return;
+                   }
+                   root.restartTargetId = "";
+                   AppLauncher.launch(id);
+               }
            }
        }
        AppEditor {

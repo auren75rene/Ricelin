@@ -7,6 +7,7 @@ import Quickshell.Io
 import Quickshell.Widgets
 import Quickshell.Services.Pipewire
 import "Singletons"
+import "lib/cameradevices.js" as CameraDevices
 
 /**
  * 録 RECORD surface: drives gpu-screen-recorder through the ScreenRec singleton,
@@ -75,6 +76,7 @@ PillSurface {
 
     readonly property bool cameraBusy:
         CameraRec.videoRecording ||
+        CameraRec.startingVideo ||
         CameraRec.capturingPhoto
 
     /**
@@ -246,13 +248,15 @@ PillSurface {
         ScreenRec.recorderOpen = active;
 
         if (!active) {
-            ScreenRec.cameraOverlayEnabled = false;
+            var keepScreenCamera = CameraDevices.shouldKeepScreenCamera(root.screenCameraMode, ScreenRec.recording);
 
             if (CameraRec.videoRecording)
                 CameraRec.stopVideo();
 
-            if (!root.screenCameraMode)
+            if (!keepScreenCamera) {
+                ScreenRec.cameraOverlayEnabled = false;
                 CameraRec.stopCamera();
+            }
         }
         if (active) {
             MediaRec.refresh();
@@ -266,7 +270,6 @@ PillSurface {
         } else {
             chooserOpen = false;
             screenChooserOpen = false;
-            CameraRec.stopCamera();
         }
     }
 
@@ -569,16 +572,18 @@ PillSurface {
                     text: root.cameraMode
                         ? (CameraRec.videoRecording
                             ? "REC"
-                            : (CameraRec.capturingPhoto
-                                ? "SAVING"
-                                : (CameraRec.cameraActive
-                                    ? "LIVE"
-                                    : "OFF")))
+                            : (CameraRec.startingVideo
+                                ? "STARTING"
+                                : (CameraRec.capturingPhoto
+                                    ? "SAVING"
+                                    : (CameraRec.cameraActive
+                                        ? "LIVE"
+                                        : "OFF"))))
                         : (ScreenRec.recording
                             ? root.fmtTime(root.elapsed)
                             : (root.counting ? "GET READY" : "IDLE"))
                     color: root.cameraMode
-                        ? (CameraRec.videoRecording ? Theme.vermLit : Theme.dim)
+                        ? ((CameraRec.videoRecording || CameraRec.startingVideo) ? Theme.vermLit : Theme.dim)
                         : (ScreenRec.recording ? Theme.vermLit : Theme.dim)
                     font.family: Theme.font
                     font.pixelSize: 10 * root.s
@@ -743,6 +748,7 @@ PillSurface {
 
                 onPicked: (v) => {
                     if (!CameraRec.videoRecording &&
+                        !CameraRec.startingVideo &&
                         !CameraRec.capturingPhoto)
                         root.cameraCaptureMode = v
                 }
@@ -1331,11 +1337,13 @@ PillSurface {
                     text: root.cameraMode
                         ? (CameraRec.videoRecording
                             ? "Stop video"
-                            : (root.cameraPhotoMode
-                                ? "Take photo"
-                                : "Start video"))
+                            : (CameraRec.startingVideo
+                                ? "Starting video…"
+                                : (root.cameraPhotoMode
+                                    ? "Take photo"
+                                    : "Start video")))
                         : (ScreenRec.recording
-                            ? "Stop recording"
+                            ? (ScreenRec.canStop ? "Stop recording" : "External recording")
                             : (root.counting
                                 ? "Starting…"
                                 : "Start recording"))
@@ -1353,12 +1361,18 @@ PillSurface {
                     text: root.cameraMode
                         ? (CameraRec.capturingPhoto
                             ? "saving…"
-                            : (root.cameraVideoMode
-                                ? "tap to record"
+                            : (CameraRec.startingVideo
+                                ? "preparing…"
+                                : (CameraRec.videoRecording
+                                    ? "tap to stop"
+                                    : (root.cameraVideoMode
+                                        ? "tap to record"
+                                        : "tap"))))
+                        : (ScreenRec.recording && !ScreenRec.canStop
+                            ? "stop externally"
+                            : (root.counting
+                                ? "tap to cancel"
                                 : "tap"))
-                        : (root.counting
-                            ? "tap to cancel"
-                            : "tap")
                     color: Theme.faint
                     font.family: Theme.font
                     font.pixelSize: 10 * root.s

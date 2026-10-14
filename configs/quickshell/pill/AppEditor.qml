@@ -16,13 +16,14 @@ import "Singletons"
  * Execution, Graphics, Window, Performance, Advanced — plus a small
  * Danger Zone at the foot for removing the entry from Ricelin (this never
  * touches the prefix or the game's own files on disk, only the registry
- * record; deleting the prefix itself is one explicit tap away in Execution).
+ * record; resetting a prefix requires an explicit two-step confirmation in Execution).
  */
 Item {
     id: root
 
     required property var app
     property real s: 1
+    readonly property bool canManageWinePrefix: ["wine", "wine-staging", "umu"].indexOf(root.app.runner) >= 0
 
     signal back()
 
@@ -341,8 +342,18 @@ Item {
         }
         SettingsRow {
             name: "Favorite"
-            last: true
             control: ToggleSwitch { checked: root.app.favorite; onToggled: root.patch({ favorite: !root.app.favorite }) }
+        }
+        SettingsRow {
+            name: "Blades"
+            sub: "Auto lists games and Wine apps on the corner fan. Pin always lists this app, Hide never does."
+            last: true
+            control: SettingsSeg {
+                s: root.s
+                options: [ { label: "Auto", value: "auto" }, { label: "Pin", value: "pin" }, { label: "Hide", value: "hide" } ]
+                value: root.app.blade || "auto"
+                onPicked: (v) => root.patch({ blade: v })
+            }
         }
         Item { width: 1; height: 10 * root.s }
         LabeledField { s: root.s; label: "Custom icon (optional)"; text: root.app.iconImage; placeholder: "Auto (first letter of name)"; browse: "file"; last: true; onCommitted: (v) => root.patch({ iconImage: v }) }
@@ -373,11 +384,67 @@ Item {
         Flow {
             width: parent.width
             spacing: 6 * root.s
-            TextButton { label: "Create"; onClicked: AppLauncher.createPrefix(root.app) }
-            TextButton { label: "Clone…"; onClicked: AppLauncher.pickFolder((p) => { if (p) AppLauncher.clonePrefix(root.app, p); }) }
-            TextButton { label: "Reset"; danger: true; onClicked: AppLauncher.resetPrefix(root.app) }
-            TextButton { label: "Open Files"; onClicked: AppLauncher.openPrefixFiles(root.app) }
-            TextButton { label: "Winetricks"; onClicked: AppLauncher.runWinetricks(root.app) }
+            TextButton { visible: root.canManageWinePrefix; label: "Create"; onClicked: AppLauncher.createPrefix(root.app) }
+            TextButton { visible: root.canManageWinePrefix; label: "Clone…"; onClicked: AppLauncher.pickFolder((p) => { if (p) AppLauncher.clonePrefix(root.app, p); }) }
+            TextButton {
+                visible: root.canManageWinePrefix
+                label: prefixResetArm.armed ? "Confirm reset" : "Reset"
+                danger: true
+                onClicked: {
+                    var currentPath = String(root.app.prefix || "");
+                    if (!prefixResetArm.armed) {
+                        prefixResetArm.targetPath = currentPath;
+                        prefixResetArm.armed = true;
+                        prefixResetArm.restart();
+                    } else if (currentPath === prefixResetArm.targetPath && currentPath.length > 0) {
+                        var targetApp = Object.assign({}, root.app, { prefix: prefixResetArm.targetPath });
+                        prefixResetArm.stop();
+                        prefixResetArm.armed = false;
+                        prefixResetArm.targetPath = "";
+                        AppLauncher.resetPrefix(targetApp);
+                    } else {
+                        prefixResetArm.stop();
+                        prefixResetArm.armed = false;
+                        prefixResetArm.targetPath = "";
+                    }
+                }
+            }
+            TextButton { visible: root.app.runner !== "native"; label: "Open Files"; onClicked: AppLauncher.openPrefixFiles(root.app) }
+            TextButton { visible: root.app.runner !== "native"; label: "Winetricks"; onClicked: AppLauncher.runWinetricks(root.app) }
+        }
+        Text {
+            visible: root.app.runner === "steam"
+            width: parent.width
+            wrapMode: Text.WordWrap
+            text: "Steam manages its Proton runtime; creation, cloning and resetting are disabled here."
+            color: Theme.faint
+            font.family: Theme.font
+            font.pixelSize: 10 * root.s
+        }
+        Text {
+            visible: root.app.runner === "native"
+            width: parent.width
+            wrapMode: Text.WordWrap
+            text: "Native Linux apps launch directly; Wine prefix tools are disabled for this runner."
+            color: Theme.faint
+            font.family: Theme.font
+            font.pixelSize: 10 * root.s
+        }
+        Text {
+            visible: prefixResetArm.armed
+            width: parent.width
+            wrapMode: Text.WordWrap
+            text: "Tap Confirm reset again to erase this prefix:\n" + prefixResetArm.targetPath
+            color: Theme.subtle
+            font.family: Theme.font
+            font.pixelSize: 10 * root.s
+        }
+        Timer {
+            id: prefixResetArm
+            property bool armed: false
+            property string targetPath: ""
+            interval: 4000
+            onTriggered: { armed = false; targetPath = ""; }
         }
 
         Item { width: 1; height: 10 * root.s; visible: root.app.runner === "umu" }
@@ -394,8 +461,18 @@ Item {
             last: true
             control: SettingsSeg {
                 s: root.s
-                options: (RuntimeManager.protonBuilds.length > 0 ? RuntimeManager.protonBuilds.map(b => ({ label: b.name, value: b.name })) : [ { label: "GE-Proton", value: "GE-Proton" } ])
-                value: root.app.protonBuild
+                options: (RuntimeManager.protonBuilds.length > 0 ? RuntimeManager.protonBuilds.map(b => ({ label: b.name, value: b.path || b.name })) : [ { label: "GE-Proton", value: "GE-Proton" } ])
+                value: {
+                    var current = String(root.app.protonBuild || "");
+                    for (var i = 0; i < RuntimeManager.protonBuilds.length; ++i) {
+                        var build = RuntimeManager.protonBuilds[i];
+                        if (build.path === current)
+                            return current;
+                        if (build.name === current)
+                            return build.path || current;
+                    }
+                    return current;
+                }
                 onPicked: (v) => root.patch({ protonBuild: v })
             }
         }
