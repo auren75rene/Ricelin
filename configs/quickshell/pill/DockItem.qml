@@ -63,7 +63,11 @@ Item {
     // owns the single visible outline, so an active icon never gets a nested
     // border when the pointer moves over it. The active pip still marks focus.
     Rectangle {
-        anchors.fill: parent
+        // Keep the persistent active-state tint as compact as the shared lens.
+        // This is fill only; DockBody remains the sole owner of the outline.
+        anchors.centerIn: iconBox
+        width: iconBox.width + 8 * root.s
+        height: width
         radius: 15 * root.s
         color: Qt.alpha(Theme.bright, 0.065)
         opacity: root.item && root.item.active ? 1 : 0
