@@ -80,17 +80,20 @@ Item {
         preferredRendererType: Shape.CurveRenderer
 
         ShapePath {
-            strokeColor: Qt.alpha(Theme.bright, 0.22)
-            strokeWidth: 1
+            // The tint thickens a little as the fan settles open, then thins
+            // again as progress reverses on close. This is a restrained material
+            // morph, not a pulsing animation.
+            strokeColor: Qt.alpha(Theme.cardBot, 0.30)
+            strokeWidth: 2.0 * fan.s
             fillGradient: RadialGradient {
                 centerX: fan.originX
                 centerY: fan.originY
                 centerRadius: fan.sectorSize
                 focalX: fan.originX
                 focalY: fan.originY
-                GradientStop { position: 0; color: Qt.alpha(Theme.cardTop, 0.34) }
-                GradientStop { position: 0.58; color: Qt.alpha(Theme.cardTop, 0.12) }
-                GradientStop { position: 1; color: Qt.alpha(Theme.cardBot, 0.025) }
+                GradientStop { position: 0; color: Qt.alpha(Theme.cardTop, 0.23 + 0.13 * fan.progress) }
+                GradientStop { position: 0.58; color: Qt.alpha(Theme.cardTop, 0.08 + 0.06 * fan.progress) }
+                GradientStop { position: 1; color: Qt.alpha(Theme.cardBot, 0.02 + 0.025 * fan.progress) }
             }
             startX: fan.originX
             startY: fan.originY
@@ -108,8 +111,10 @@ Item {
         // A brighter meniscus along the upper rim gives the pane a glass edge
         // without tinting the app blades themselves.
         ShapePath {
-            strokeColor: Qt.alpha(Theme.bright, 0.34)
-            strokeWidth: 1.15 * fan.s
+            // The clean, bright inner rim stays readable against light and
+            // dark wallpapers; its slight increase follows the same open morph.
+            strokeColor: Qt.alpha(Theme.bright, 0.52 + 0.16 * fan.progress)
+            strokeWidth: 1.25 * fan.s
             fillColor: "transparent"
             startX: fan.originX
             startY: fan.originY
