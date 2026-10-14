@@ -52,6 +52,7 @@ Item {
     property real lensY: 0
     property real lensW: 0
     property real lensH: 0
+    property bool lensContracting: false
 
     property string hintTitle: ""
     property string hintDesc: ""
@@ -63,23 +64,30 @@ Item {
             if (root.lensTarget === target) {
                 root.hintShown = false;
                 hintDelay.stop();
+                lensContractionDelay.stop();
 
-                // Contract the lens around its own centre before it fades. When
-                // another item is entered, the same lens expands from that point.
+                // Keep the lens visible for the full contraction, then fade it.
+                // A new hover interrupts this and expands the same lens elsewhere.
                 var centerX = root.lensX + root.lensW / 2;
                 var centerY = root.lensY + root.lensH / 2;
                 var collapsedSize = 8 * root.s;
+                root.lensContracting = true;
                 root.lensX = centerX - collapsedSize / 2;
                 root.lensY = centerY - collapsedSize / 2;
                 root.lensW = collapsedSize;
                 root.lensH = collapsedSize;
                 root.lensTarget = null;
+                lensContractionDelay.restart();
             }
             return;
         }
+        lensContractionDelay.stop();
+        root.lensContracting = false;
         var p = target.mapToItem(body, 0, 0);
         var isAppIcon = !!target.item;
-        var inflate = (isAppIcon ? 4 : 2) * root.s;
+        // Every dock cell is the same size; app focus gets a little visual inset,
+        // while status controls use the full cell without extra padding.
+        var inflate = (isAppIcon ? 4 : 0) * root.s;
 
         // App focus hugs the glyph, not the whole clickable tile. The window
         // beads orbit outside this compact frame and keep their own hit targets.
@@ -94,7 +102,9 @@ Item {
         root.lensH = isAppIcon ? focusSize + 2 * inflate : target.height + 2 * inflate;
         root.hintTitle = title;
         root.hintDesc = desc;
-        root.hintY = target.mapToItem(content, 0, target.height / 2).y;
+        var faceOffsetY = target.faceVerticalOffset !== undefined
+            ? target.faceVerticalOffset * target.s : 0;
+        root.hintY = target.mapToItem(content, 0, target.height / 2 + faceOffsetY).y;
         // Already showing one hint: move to the next at once; otherwise wait a beat.
         if (root.hintShown)
             return;
@@ -105,6 +115,12 @@ Item {
         id: hintDelay
         interval: 320
         onTriggered: if (root.lensTarget) root.hintShown = true
+    }
+
+    Timer {
+        id: lensContractionDelay
+        interval: Motion.glide
+        onTriggered: root.lensContracting = false
     }
 
     Item {
@@ -136,7 +152,7 @@ Item {
                 }
                 border.width: 1
                 border.color: Qt.alpha(Theme.bright, 0.24)
-                opacity: root.lensTarget ? 1 : 0
+                opacity: root.lensTarget || root.lensContracting ? 1 : 0
                 visible: opacity > 0.01
                 Behavior on opacity { NumberAnimation { duration: Motion.fast } }
                 Behavior on x { enabled: lens.opacity > 0.05; NumberAnimation { duration: Motion.glide; easing.type: Easing.OutCubic } }
