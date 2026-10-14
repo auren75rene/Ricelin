@@ -11,6 +11,10 @@ const file = path.join(__dirname, "..", "configs", "quickshell", "pill", "lib", 
 const src = fs.readFileSync(file, "utf8").replace(/^\.pragma.*$/m, "");
 const dockSingletonFile = path.join(__dirname, "..", "configs", "quickshell", "pill", "Singletons", "Dock.qml");
 const dockSingletonSrc = fs.readFileSync(dockSingletonFile, "utf8");
+const dockItemFile = path.join(__dirname, "..", "configs", "quickshell", "pill", "DockItem.qml");
+const dockItemSrc = fs.readFileSync(dockItemFile, "utf8");
+const dockBodyFile = path.join(__dirname, "..", "configs", "quickshell", "pill", "DockBody.qml");
+const dockBodySrc = fs.readFileSync(dockBodyFile, "utf8");
 const ctx = {};
 vm.createContext(ctx);
 vm.runInContext(src, ctx);
@@ -152,6 +156,19 @@ check("windowAt rejects missing, fractional and out-of-range indexes", () => {
     assert.strictEqual(D.windowAt(item, 1), null);
     assert.strictEqual(D.windowAt(item, 0.5), null);
     assert.strictEqual(D.windowAt(null, 0), null);
+});
+
+console.log("dock hover styling");
+check("focused app backing has no nested border", () => {
+    const match = dockItemSrc.match(/\/\/ Focused app:[\\s\\S]*?Rectangle\\s*\\{([\\s\\S]*?)\\n    \\}/);
+    assert.ok(match, "focused app backing should exist");
+    assert.ok(!/border\\.(width|color)\\s*:/.test(match[1]), "focused app backing must not draw an outline");
+});
+check("shared hover lens keeps the single moving outline", () => {
+    const match = dockBodySrc.match(/\/\/ The lens:[\\s\\S]*?Rectangle\\s*\\{([\\s\\S]*?)\\n            \\}/);
+    assert.ok(match, "shared hover lens should exist");
+    assert.ok(/border\\.width\\s*:\\s*1/.test(match[1]), "shared lens should retain its outline");
+    assert.ok(/Behavior on x/.test(match[1]), "shared outline should move with the cursor");
 });
 
 console.log("focus dispatcher");
