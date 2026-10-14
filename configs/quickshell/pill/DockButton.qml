@@ -22,7 +22,9 @@ Item {
     property bool badge: false
     property real s: 1
     property real tile: 44 * s
-    property real tileHeight: 36 * s
+    property real tileHeight: 44 * s
+    // Optional optical offset for controls with a second line of text.
+    property real faceVerticalOffset: 0
     /** The Wi-Fi arcs have their own drawing; `level` is 0..1, `on` the radio state. */
     property bool wifi: false
     property real wifiLevel: 0
@@ -40,7 +42,8 @@ Item {
     Item {
         id: face
         anchors.centerIn: parent
-        width: 21 * root.s
+        anchors.verticalCenterOffset: root.faceVerticalOffset * root.s
+        width: 22 * root.s
         height: width
         scale: area.pressed ? 0.88 : (area.containsMouse ? 1.14 : 1)
         Behavior on scale { SpringAnimation { spring: 3.5; damping: 0.3 } }
@@ -68,7 +71,7 @@ Item {
         visible: root.caption.length > 0
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom
-        anchors.bottomMargin: -1 * root.s
+        anchors.bottomMargin: 1 * root.s
         text: root.caption
         color: area.containsMouse ? Theme.bright : root.tint
         font.family: Theme.font
