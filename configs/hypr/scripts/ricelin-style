@@ -220,22 +220,22 @@ cmd_list() {
 # contents. Values are stored as plain text in a .conf file and never sourced.
 cmd_add() {
     [ "$#" -ge 4 ] && [ "$#" -le 5 ] || usage
-    id="$1"
-    label="$2"
-    kind="$3"
+    new_id="$1"
+    new_name="$2"
+    new_kind="$3"
     raw_target="$4"
-    blurb="${5:-}"
+    new_note="${5:-}"
 
-    valid_id "$id" || { reject_add "Invalid style ID" "Use lowercase letters, digits, dot, underscore or hyphen."; return 1; }
-    case "$id" in ricelin | pill | launcher | lock | pill-recovery-*) reject_add "Reserved style ID" "'$id' cannot be registered as an extra style."; return 1 ;; esac
-    [ -n "$label" ] || { reject_add "Missing style name" "Enter a display name."; return 1; }
-    case "$kind" in config | path) ;; *) reject_add "Invalid style type" "Choose a config folder or an entry file."; return 1 ;; esac
+    valid_id "$new_id" || { reject_add "Invalid style ID" "Use lowercase letters, digits, dot, underscore or hyphen."; return 1; }
+    case "$new_id" in ricelin | pill | launcher | lock | pill-recovery-*) reject_add "Reserved style ID" "'$new_id' cannot be registered as an extra style."; return 1 ;; esac
+    [ -n "$new_name" ] || { reject_add "Missing style name" "Enter a display name."; return 1; }
+    case "$new_kind" in config | path) ;; *) reject_add "Invalid style type" "Choose a config folder or an entry file."; return 1 ;; esac
 
     tab="$(printf '\t')"
     nl='
 '
     cr="$(printf '\r')"
-    for value in "$id" "$label" "$raw_target" "$blurb"; do
+    for value in "$new_id" "$new_name" "$raw_target" "$new_note"; do
         case "$value" in
             *"$tab"* | *"$nl"* | *"$cr"*)
                 reject_add "Invalid style details" "Names, IDs, paths and notes must fit on one line."
@@ -249,7 +249,7 @@ cmd_add() {
         /*) ;;
         *) reject_add "Style path must be absolute" "Choose a path with Browse, or use an absolute path or ~/…."; return 1 ;;
     esac
-    if [ "$kind" = config ]; then
+    if [ "$new_kind" = config ]; then
         [ -d "$target" ] && [ -f "$target/shell.qml" ] || {
             reject_add "Not a Quickshell config folder" "$target must be a directory containing shell.qml."
             return 1
@@ -263,20 +263,20 @@ cmd_add() {
 
     # A .conf already wins over discovered folders, so don't silently replace
     # one; likewise don't shadow an automatically discovered style.
-    if resolve "$id"; then
-        reject_add "Style already exists" "'$id' is already registered or auto-discovered."
+    if resolve "$new_id"; then
+        reject_add "Style already exists" "'$new_id' is already registered or auto-discovered."
         return 1
     fi
 
     mkdir -p "$conf_dir" || { reject_add "Cannot register style" "Could not create $conf_dir."; return 1; }
-    file="$conf_dir/$id.conf"
+    file="$conf_dir/$new_id.conf"
     tmp="$conf_dir/.$id.conf.$"
     [ ! -e "$file" ] && [ ! -e "$tmp" ] || {
         reject_add "Style already exists" "A registration file for '$id' already exists."
         return 1
     }
 
-    ( umask 077; printf 'name=%s\n%s=%s\nnote=%s\n' "$label" "$kind" "$target" "$blurb" >"$tmp" ) || {
+    ( umask 077; printf 'name=%s\n%s=%s\nnote=%s\n' "$new_name" "$new_kind" "$target" "$new_note" >"$tmp" ) || {
         rm -f "$tmp"
         reject_add "Cannot register style" "Could not write the registration file."
         return 1
@@ -287,8 +287,8 @@ cmd_add() {
         return 1
     }
 
-    note "registered style '$id' ($label)"
-    have notify-send && notify-send -u normal -a Ricelin "Style added" "$label is now available in Styles & Persona."
+    note "registered style '$new_id' ($new_name)"
+    have notify-send && notify-send -u normal -a Ricelin "Style added" "$new_name is now available in Styles & Persona."
     return 0
 }
 
