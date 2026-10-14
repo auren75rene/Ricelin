@@ -22,7 +22,7 @@ new_env() {
     : >"$LOG"
     export LOG HOME="$fake/home"
     unset XDG_CONFIG_HOME XDG_STATE_HOME FAKE_RUNNING RICELIN_PERSONA_DIR
-    for t in sed tr cat mkdir rm dirname; do
+    for t in sed tr cat mkdir rm mv dirname; do
         p="$(command -v "$t" 2>/dev/null)" && ln -s "$p" "$fake/bin/$t"
     done
     # --status answers from FAKE_RUNNING (space separated config/path basenames).
@@ -75,6 +75,34 @@ out="$(run list)"
 is "an external RICELIN_PERSONA_DIR appears as Persona" "$out" "persona${tab}Persona${tab}stopped${tab}"
 run switch persona >/dev/null
 expect "switch uses the configured Persona directory" "^qs-toggle --start config $fake/custom/persona"
+
+echo "add"
+new_env
+mkdir -p "$fake/external/theme with spaces"; : >"$fake/external/theme with spaces/shell.qml"
+run add external-theme "External Theme" config "$fake/external/theme with spaces" "Added from the pill"
+is "add writes the configured style record" "$(cat "$HOME/.config/ricelin/styles/external-theme.conf")" "name=External Theme
+config=$fake/external/theme with spaces
+note=Added from the pill"
+is "the new style appears in the list" "$(run list)" "external-theme${tab}External Theme${tab}stopped${tab}Added from the pill"
+
+new_env
+mkdir -p "$fake/external"; : >"$fake/external/theme.qml"
+run add external-file "External File" path "$fake/external/theme.qml" >/dev/null
+is "add accepts a single QML entry file" "$(cat "$HOME/.config/ricelin/styles/external-file.conf")" "name=External File
+path=$fake/external/theme.qml
+note="
+run add external-file "Duplicate" path "$fake/external/theme.qml" >/dev/null 2>&1
+is "duplicate registrations are rejected" "$(run list | wc -l | tr -d ' ')" 1
+
+new_env
+mkdir -p "$fake/external/not-qml"
+run add broken "Broken" config "$fake/external/not-qml" >/dev/null 2>&1
+is "a config without shell.qml is rejected" "$(run list)" ""
+
+new_env
+folder pill-recovery-20260917
+folder Persona-Quickshell
+is "recovery backup folders are not shown as styles" "$(run list)" "persona${tab}Persona${tab}stopped${tab}"
 
 new_env
 mkdir -p "$HOME/.config/ricelin/styles"
