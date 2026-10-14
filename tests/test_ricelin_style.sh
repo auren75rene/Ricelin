@@ -21,7 +21,7 @@ new_env() {
     LOG="$fake/log"
     : >"$LOG"
     export LOG HOME="$fake/home"
-    unset XDG_CONFIG_HOME XDG_STATE_HOME FAKE_RUNNING
+    unset XDG_CONFIG_HOME XDG_STATE_HOME FAKE_RUNNING RICELIN_PERSONA_DIR
     for t in sed tr cat mkdir rm dirname; do
         p="$(command -v "$t" 2>/dev/null)" && ln -s "$p" "$fake/bin/$t"
     done
@@ -67,6 +67,14 @@ is "Ricelin's own pill, launcher and lock are not styles" "$(printf '%s\n' "$out
 new_env; folder Persona-Quickshell
 FAKE_RUNNING="Persona-Quickshell" out="$(FAKE_RUNNING="Persona-Quickshell" run list)"
 is "a running style is reported as running" "$out" "persona${tab}Persona${tab}running${tab}"
+
+new_env
+mkdir -p "$fake/custom/persona"; : >"$fake/custom/persona/shell.qml"
+export RICELIN_PERSONA_DIR="$fake/custom/persona"
+out="$(run list)"
+is "an external RICELIN_PERSONA_DIR appears as Persona" "$out" "persona${tab}Persona${tab}stopped${tab}"
+run switch persona >/dev/null
+expect "switch uses the configured Persona directory" "^qs-toggle --start config $fake/custom/persona"
 
 new_env
 mkdir -p "$HOME/.config/ricelin/styles"
