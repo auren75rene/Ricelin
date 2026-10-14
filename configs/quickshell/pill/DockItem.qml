@@ -58,13 +58,13 @@ Item {
         NumberAnimation { target: root; property: "opacity"; to: 1; duration: Motion.fast }
     }
 
-    // Focused app: a quiet backing so it reads at a glance.
+    // Focused app: a quiet fill only. The shared hover lens in DockBody
+    // owns the single visible outline, so an active icon never gets a nested
+    // border when the pointer moves over it. The active pip still marks focus.
     Rectangle {
         anchors.fill: parent
         radius: 15 * root.s
-        color: Qt.alpha(Theme.bright, 0.09)
-        border.width: 1
-        border.color: Qt.alpha(Theme.bright, 0.16)
+        color: Qt.alpha(Theme.bright, 0.065)
         opacity: root.item && root.item.active ? 1 : 0
         Behavior on opacity { NumberAnimation { duration: Motion.fast } }
     }
