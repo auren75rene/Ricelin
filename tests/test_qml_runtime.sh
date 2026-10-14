@@ -65,6 +65,7 @@ install -m 644 "$here/qml_runtime_smoke.qml" "$qml_dir/qml_runtime_smoke.qml"
 # Mirror the production layout so relative imports from Singletons resolve.
 ln -s "$repo/configs/quickshell/pill/Singletons" "$qml_dir/Singletons"
 ln -s "$repo/configs/quickshell/pill/lib" "$qml_dir/lib"
+ln -s "$repo/configs/quickshell/pill" "$qml_dir/Pill"
 
 env \
     HOME="$home" \
