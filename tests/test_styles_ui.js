@@ -32,6 +32,8 @@ check("Styles surface labels Persona and shows a back affordance", () => {
     assert(styles.includes('name: "chevron-left"'));
     assert(styles.includes("for (var i = 0; i < Styles.list.length; i++)"));
     assert(styles.includes("Styles.choose(r.id)"));
+    assert(styles.includes("RICELIN_PERSONA_DIR"));
+    assert(styles.includes("~/.config/ricelin/styles/<id>.conf"));
 });
 
 check("the Styles header returns to Settings instead of dismissing the pill", () => {
