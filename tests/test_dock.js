@@ -190,15 +190,21 @@ check("app focus has a minimum visual size and clears the Writer divider", () =>
     assert.ok(dockBodySrc.includes("readonly property real dividerClearance: 5 * s"));
     assert.ok(dockBodySrc.includes("spacing: root.gap + root.dividerClearance"));
     assert.ok(dockBodySrc.includes("tail.height - gap - root.dividerClearance"));
-    assert.ok(dockBodySrc.includes("x: -3.5 * root.s"));
+    assert.ok(!dockBodySrc.includes("x: -3.5 * root.s"),
+        "the app column must not be shifted off the capsule centreline");
+    assert.ok(dockSingletonSrc.includes("readonly property real padPx: 14"));
 
     const tile = 44;
-    const pad = 9;
-    const appShift = 3.5;
+    const pad = 14;
+    const appShift = 0;
     const focusHeight = tile * 0.82 + 8;
     const focusHalf = focusHeight / 2;
     const appLeftClearance = pad + tile / 2 - appShift - focusHalf;
+    const capsuleHalfWidth = tile / 2 + pad;
+    const appCenterFromCapsuleLeft = pad + tile / 2;
     const dividerGap = 4 + 5 - (focusHeight - tile) / 2;
+    assert.strictEqual(appCenterFromCapsuleLeft, capsuleHalfWidth,
+        "the app icon center must coincide with the capsule centerline");
     assert.ok(appLeftClearance > 5,
         "the larger focus layer must remain clear of the capsule's inner left border");
     assert.ok(dividerGap > 8.8,
@@ -222,7 +228,7 @@ check("window beads clear their own lens, neighboring active tints, and the caps
     const eccentricity = 0;
     const maxOrbitRadius = orbitAxis * (1 + eccentricity);
     const activeHaloRadius = 4 * 1.2 / 2;
-    const capsuleHalfWidth = 44 / 2 + 9 + 3.5;
+    const capsuleHalfWidth = 44 / 2 + 14;
     const staticRailCenterRadius = 26;
     const cellPitch = 44 + 4;
     function roundedRectDistance(x, y, halfSize, cornerRadius) {
@@ -248,7 +254,7 @@ check("window beads clear their own lens, neighboring active tints, and the caps
         "active bead halo must not intrude into either adjacent app's active tint");
     assert.ok(capsuleHalfWidth - maxOrbitRadius - activeHaloRadius > 1,
         "active bead halo must keep visible clearance from the glass capsule side");
-    assert.ok(9 + 12 + 44 / 2 - maxOrbitRadius - activeHaloRadius > 1,
+    assert.ok(14 + 12 + 44 / 2 - maxOrbitRadius - activeHaloRadius > 1,
         "active bead halo must clear the rounded capsule ends");
     assert.ok(staticRailCenterRadius - activeHaloRadius > activeTintHalfSize,
         "active bead halo must clear the compact active tint on the resting rail");
