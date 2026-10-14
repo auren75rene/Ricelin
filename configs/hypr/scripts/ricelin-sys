@@ -34,11 +34,19 @@ EOF
     exit 2
 }
 
-# True only while systemd is PID 1, the same test sd_booted() uses. A systemctl
-# binary proves nothing: some non-systemd distros ship a stub, and a leftover
-# systemd install on an OpenRC box must not be talked to. The env var is a test
-# seam so the self-check does not depend on the machine it runs on.
-under_systemd() { [ -d "${RICELIN_TEST_SYSTEMD_DIR:-/run/systemd/system}" ]; }
+# Detect the running init, never the distro name or the mere presence of
+# systemctl. /run/systemd/system is systemd's booted marker; checking PID 1 as
+# well keeps container/alternate-init sessions out even if the marker exists.
+# RICELIN_TEST_SYSTEMD_DIR is an explicit self-test seam and deliberately
+# replaces host detection during the deterministic tests.
+under_systemd() {
+    if [ "${RICELIN_TEST_SYSTEMD_DIR+x}" = x ]; then
+        [ -d "$RICELIN_TEST_SYSTEMD_DIR" ]
+        return
+    fi
+    [ -d /run/systemd/system ] || return 1
+    [ "$(cat /proc/1/comm 2>/dev/null)" = systemd ]
+}
 
 # A systemd user unit with this name exists for the current login.
 user_unit() { under_systemd && have systemctl && systemctl --user cat "$1.service" >/dev/null 2>&1; }
