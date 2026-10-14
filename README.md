@@ -36,7 +36,9 @@ The shell is split by what each part is for:
   Auto / Pin / Hide switch in its editor.
 - **Styles** are extra Quickshell setups (Persona is one). Anything in
   `~/.config/quickshell/<name>` with a `shell.qml` shows up in the pill's palette
-  panel; `~/.config/ricelin/styles/<id>.conf` covers setups that live elsewhere.
+  panel. Persona's configured location (`RICELIN_PERSONA_DIR`, default
+  `~/.config/quickshell/Persona-Quickshell`) is also registered even if it lives
+  elsewhere; `~/.config/ricelin/styles/<id>.conf` covers other external setups.
   See `configs/hypr/scripts/ricelin-style`.
 - **Boombox** is one key: `Super` + `Z` starts it and the same key stops it. Set
   `RICELIN_BOOMBOX_QML` if its `main.qml` is not in the default place.
