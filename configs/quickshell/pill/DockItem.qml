@@ -142,7 +142,12 @@ Item {
     // small planetary system; on blur they ease back to their static pip rail.
     Item {
         id: pips
-        anchors.fill: parent
+        // Extend beyond the tile so pip hit-targets remain valid at the outer
+        // edge, even when their orbital position sits just outside the icon.
+        x: -8 * root.s
+        y: -8 * root.s
+        width: root.width + 16 * root.s
+        height: root.height + 16 * root.s
         visible: root.item && root.item.running > 0
         z: 2
 
@@ -173,20 +178,20 @@ Item {
 
                 readonly property real staticX:
                     (Dock.onRight ? root.width + 1.5 * root.s : -1.5 * root.s)
-                    - width / 2
+                    - width / 2 + 8 * root.s
                 readonly property real staticY:
                     root.height / 2
                     + (index - (dotCount - 1) / 2) * 10 * root.s
-                    - height / 2
+                    - height / 2 + 8 * root.s
 
                 readonly property real orbitX:
                     root.width / 2
                     + semiMajorAxis * (Math.cos(eccentricAnomaly) - eccentricity)
-                    - width / 2
+                    - width / 2 + 8 * root.s
                 readonly property real orbitY:
                     root.height / 2
                     + semiMinorAxis * Math.sin(eccentricAnomaly)
-                    - height / 2
+                    - height / 2 + 8 * root.s
 
                 property real orbitMix: root.item && root.item.active ? 1 : 0
                 Behavior on orbitMix {
