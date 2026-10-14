@@ -176,15 +176,27 @@ check("hover lens hugs the app glyph while beads orbit independently", () => {
     assert.ok(!dockBodySrc.includes("var pipRoom = hasPips ? 8 * root.s : 0;"));
     assert.ok(dockItemSrc.includes("root.windowActivated(pipHit.index)"));
 });
-check("beads and focus lens use glass-like highlights without another border", () => {
+check("glass lens keeps one outline and no refraction streaks", () => {
     assert.ok(dockItemSrc.includes("Tiny glass bead: tinted core, darkened lower edge, bright rim"));
     assert.ok(dockItemSrc.includes("Qt.lighter(Theme.onGlow, 1.65)"));
     assert.ok(dockItemSrc.includes("The glint is deliberately offset"));
-    const match = dockBodySrc.match(/\/\/ The lens:[\s\S]*?Rectangle\s*\{([\s\S]*?)\n            \}/);
+    const match = dockBodySrc.match(/\\/\\/ The lens:[\\s\\S]*?Rectangle\\s*\\{([\\s\\S]*?)\\n            \\}/);
     assert.ok(match, "shared hover lens should exist");
     assert.ok(match[1].includes("GradientStop { position: 0; color: Qt.alpha(Theme.bright, 0.15) }"));
     assert.ok(match[1].includes("border.width: 1"));
-    assert.ok(match[1].includes("Refraction-inspired streaks"));
+    assert.ok(!match[1].includes("Refraction-inspired streaks"));
+    assert.ok(!match[1].includes("anchors.top: parent.top"));
+});
+
+check("hover lens contracts into a small centered shape when pointer leaves", () => {
+    assert.ok(dockBodySrc.includes("var centerX = root.lensX + root.lensW / 2;"));
+    assert.ok(dockBodySrc.includes("var centerY = root.lensY + root.lensH / 2;"));
+    assert.ok(dockBodySrc.includes("var collapsedSize = 8 * root.s;"));
+    assert.ok(dockBodySrc.includes("root.lensW = collapsedSize;"));
+    assert.ok(dockBodySrc.includes("root.lensH = collapsedSize;"));
+    assert.ok(dockBodySrc.includes("radius: Math.min(16 * root.s, width / 2, height / 2)"));
+    assert.ok(dockBodySrc.includes("Behavior on width"));
+    assert.ok(dockBodySrc.includes("Behavior on height"));
 });
 
 console.log("nextWindow");
