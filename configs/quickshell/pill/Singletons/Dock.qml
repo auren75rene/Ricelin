@@ -43,7 +43,8 @@ Singleton {
      */
     readonly property real edgePx: 10
     readonly property real tilePx: 44
-    readonly property real padPx: 9
+    /** Symmetric inner margin; keeps the icon axis centred while leaving room for orbital pips. */
+    readonly property real padPx: 14
     /** Screen edge to the capsule's far side. */
     readonly property real footprintPx: edgePx + tilePx + 2 * padPx
 
