@@ -40,10 +40,13 @@ check("the Styles header returns to Settings instead of dismissing the pill", ()
     assert(back.includes('pill.requestSurface("settings")'));
 });
 
-check("Persona is discovered from a Quickshell config or an explicit style config", () => {
+check("Persona discovery honours the same custom path as qs-toggle", () => {
     assert(styleManager.includes('"$qs_dir"/*/'));
     assert(styleManager.includes('[ -f "${d}shell.qml" ] || continue'));
     assert(styleManager.includes('f="$conf_dir/$1.conf"'));
+    assert(styleManager.includes("RICELIN_PERSONA_DIR"));
+    assert(styleManager.includes('[ -f "$persona_dir/shell.qml" ]'));
+    assert(styleManager.includes('target="$persona_dir"'));
     assert(styleManager.includes('cmd_list() {'));
 });
 
