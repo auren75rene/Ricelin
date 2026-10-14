@@ -178,6 +178,12 @@ check("hover lens hugs the app glyph while beads orbit independently", () => {
     assert.ok(!dockBodySrc.includes("var pipRoom = hasPips ? 8 * root.s : 0;"));
     assert.ok(dockItemSrc.includes("root.windowActivated(pipHit.index)"));
 });
+check("dock capsule adds vertical orbit clearance at both ends", () => {
+    assert.ok(dockBodySrc.includes("readonly property real orbitRoom: 12 * s"));
+    assert.ok(dockBodySrc.includes("height: stack.implicitHeight + 2 * root.pad + 2 * root.orbitRoom"));
+    assert.ok(dockBodySrc.includes("radius: 30 * root.s"));
+    assert.ok(dockBodySrc.includes("y: root.pad + root.orbitRoom"));
+});
 check("window beads stay outside the rounded focus frame and inside the dock", () => {
     assert.ok(dockItemSrc.includes("readonly property real semiMajorAxis: 28.3 * root.s"));
     assert.ok(dockItemSrc.includes("readonly property real eccentricity: 0.01"));
