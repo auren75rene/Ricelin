@@ -69,7 +69,9 @@ Item {
         return Math.max(0, Math.min(1, (progress - lag * index) / (1 - lag * (count - 1))));
     }
 
-    // Soft glass sector the fan sits on.
+    // Liquid-glass lens behind the fan. Its tint stays deliberately faint so
+    // the compositor-blurred wallpaper shows through; the individual app blades
+    // below keep their existing Glass styling and colors.
     Shape {
         visible: fan.progress > 0.002
         opacity: fan.progress
@@ -78,7 +80,7 @@ Item {
         preferredRendererType: Shape.CurveRenderer
 
         ShapePath {
-            strokeColor: Qt.alpha(Theme.bright, 0.16)
+            strokeColor: Qt.alpha(Theme.bright, 0.22)
             strokeWidth: 1
             fillGradient: RadialGradient {
                 centerX: fan.originX
@@ -86,8 +88,9 @@ Item {
                 centerRadius: fan.sectorSize
                 focalX: fan.originX
                 focalY: fan.originY
-                GradientStop { position: 0; color: Qt.alpha(Theme.cardTop, 0.62) }
-                GradientStop { position: 1; color: Qt.alpha(Theme.cardBot, 0.10) }
+                GradientStop { position: 0; color: Qt.alpha(Theme.cardTop, 0.34) }
+                GradientStop { position: 0.58; color: Qt.alpha(Theme.cardTop, 0.12) }
+                GradientStop { position: 1; color: Qt.alpha(Theme.cardBot, 0.025) }
             }
             startX: fan.originX
             startY: fan.originY
@@ -100,6 +103,24 @@ Item {
                 direction: PathArc.Clockwise
             }
             PathLine { x: fan.originX; y: fan.originY }
+        }
+
+        // A brighter meniscus along the upper rim gives the pane a glass edge
+        // without tinting the app blades themselves.
+        ShapePath {
+            strokeColor: Qt.alpha(Theme.bright, 0.34)
+            strokeWidth: 1.15 * fan.s
+            fillColor: "transparent"
+            startX: fan.originX
+            startY: fan.originY
+            PathLine { x: fan.originX + fan.sectorSize; y: fan.originY }
+            PathArc {
+                x: fan.originX
+                y: fan.originY + fan.sectorSize
+                radiusX: fan.sectorSize
+                radiusY: fan.sectorSize
+                direction: PathArc.Clockwise
+            }
         }
     }
 
