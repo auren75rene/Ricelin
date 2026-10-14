@@ -227,6 +227,7 @@ cmd_add() {
     new_note="${5:-}"
 
     valid_id "$new_id" || { reject_add "Invalid style ID" "Use lowercase letters, digits, dot, underscore or hyphen."; return 1; }
+    case "$new_id" in . | ..) reject_add "Invalid style ID" "'.' and '..' are not valid IDs."; return 1 ;; esac
     case "$new_id" in ricelin | pill | launcher | lock | pill-recovery-*) reject_add "Reserved style ID" "'$new_id' cannot be registered as an extra style."; return 1 ;; esac
     [ -n "$new_name" ] || { reject_add "Missing style name" "Enter a display name."; return 1; }
     case "$new_kind" in config | path) ;; *) reject_add "Invalid style type" "Choose a config folder or an entry file."; return 1 ;; esac
