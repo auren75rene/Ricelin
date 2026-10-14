@@ -35,6 +35,9 @@ Item {
     readonly property real pad: Dock.padPx * s
     readonly property real tile: Dock.tilePx * s
     readonly property real gap: 4 * s
+    // Extra vertical breathing room keeps the orbiting beads away from adjacent
+    // app focus frames and from the capsule's rounded ends.
+    readonly property real orbitRoom: 12 * s
     readonly property real bodyW: tile + 2 * pad
     /** Room to the right of the capsule for the hint bubble. */
     readonly property real hintRoom: 300 * s
@@ -132,8 +135,8 @@ Item {
             x: Dock.onRight ? content.width - root.edge - root.bodyW : root.edge
             y: Math.max(root.edge, (content.height - height) / 2)
             width: root.bodyW
-            height: stack.implicitHeight + 2 * root.pad
-            radius: 26 * root.s
+            height: stack.implicitHeight + 2 * root.pad + 2 * root.orbitRoom
+            radius: 30 * root.s
             clarity: 0.36
 
             // The lens: a soft pill of light that glides to the hovered item.
@@ -165,7 +168,7 @@ Item {
             Column {
                 id: stack
                 x: root.pad
-                y: root.pad
+                y: root.pad + root.orbitRoom
                 width: root.tile
                 spacing: root.gap
 
