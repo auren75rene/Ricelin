@@ -317,6 +317,7 @@ Item {
                         s: root.s
                         tile: root.tile
                         tileHeight: root.tile
+                        faceSize: 22 * root.s
                         glyph: "grid"
                         tint: Theme.cream
                         onClicked: root.surfaceRequested("launcher")
