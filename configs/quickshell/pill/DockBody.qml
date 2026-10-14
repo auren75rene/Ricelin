@@ -69,10 +69,19 @@ Item {
         }
         var p = target.mapToItem(body, 0, 0);
         var inflate = 2 * root.s;
+
+        // Running app pips sit just beyond the icon on the dock's outer edge.
+        // Give that edge of the shared lens enough room so its outline frames
+        // both icon and indicators instead of drawing through the beads.
+        var hasPips = !!(target.item && target.item.running > 0);
+        var pipRoom = hasPips ? 8 * root.s : 0;
+        var growLeft = hasPips && !Dock.onRight ? pipRoom : 0;
+        var growRight = hasPips && Dock.onRight ? pipRoom : 0;
+
         root.lensTarget = target;
-        root.lensX = p.x - inflate;
+        root.lensX = p.x - inflate - growLeft;
         root.lensY = p.y - inflate;
-        root.lensW = target.width + 2 * inflate;
+        root.lensW = target.width + 2 * inflate + growLeft + growRight;
         root.lensH = target.height + 2 * inflate;
         root.hintTitle = title;
         root.hintDesc = desc;
