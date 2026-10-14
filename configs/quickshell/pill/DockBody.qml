@@ -209,7 +209,9 @@ Item {
                     Column {
                         id: cluster
                         width: parent.width
-                        spacing: 1 * root.s
+                        // Use the same pitch as app cells so the dock reads as
+                        // one measured rhythm from top to bottom.
+                        spacing: root.gap
 
                         DockButton {
                             id: wifiBtn
