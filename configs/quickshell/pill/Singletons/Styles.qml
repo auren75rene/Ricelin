@@ -83,10 +83,10 @@ Singleton {
 
     Process {
         id: actProc
-        onExited: { // qmllint disable signal-handler-parameters
+        onExited: (exitCode, exitStatus) => {
             root.busy = false;
             if (root.pendingAction === "register")
-                root.registrationFinished(actProc.exitCode === 0);
+                root.registrationFinished(exitCode === 0);
             root.pendingAction = "";
             // A new instance takes a moment to show up as running; registrations
             // also refresh the index after the script has written its .conf file.
