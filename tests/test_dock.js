@@ -208,6 +208,9 @@ check("status controls use equal-height cells and reserve space for battery text
     assert.ok(dockBodySrc.includes("faceVerticalOffset: -4"));
     assert.ok(dockBodySrc.includes("var inflate = (isAppIcon ? 4 : 0) * root.s;"));
     assert.ok(dockBodySrc.includes("target.height / 2 + faceOffsetY"));
+    assert.ok(dockBodySrc.includes("id: cluster"));
+    assert.ok(dockBodySrc.includes("spacing: root.gap"));
+    assert.ok(dockBodySrc.includes("faceVerticalOffset * target.s"));
 });
 
 check("glass lens keeps one outline and no refraction streaks", () => {
@@ -277,6 +280,13 @@ check("windowAt rejects missing, fractional and out-of-range indexes", () => {
 });
 
 console.log("dock hover styling");
+check("missing app icons receive a styled, readable monogram tile", () => {
+    assert.ok(dockItemSrc.includes("Missing app artwork gets a deliberate monogram tile"));
+    assert.ok(dockItemSrc.includes("width: parent.width * 0.84"));
+    assert.ok(dockItemSrc.includes("color: Qt.alpha(Theme.onGlow, 0.18)"));
+    assert.ok(dockItemSrc.includes("font.pixelSize: root.tile * 0.48"));
+    assert.ok(dockItemSrc.includes("visible: !icon.visible"));
+});
 check("focused app backing has no nested border", () => {
     const match = dockItemSrc.match(/\/\/ Focused app:[\s\S]*?Rectangle\s*\{([\s\S]*?)\n    \}/);
     assert.ok(match, "focused app backing should exist");
