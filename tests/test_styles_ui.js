@@ -7,6 +7,7 @@ const root = path.join(__dirname, "..", "configs", "quickshell", "pill");
 const read = (name) => fs.readFileSync(path.join(root, name), "utf8");
 const settings = read("Settings.qml");
 const styles = read("StylesSurface.qml");
+const styleRow = read("StyleRow.qml");
 const addStyle = read("AddStyleSheet.qml");
 const labeledField = read("LabeledField.qml");
 const stylesSingleton = read("Singletons/Styles.qml");
@@ -28,6 +29,12 @@ check("Settings index exposes Styles & Persona", () => {
 check("the original palette shortcut still opens the same surface", () => {
     assert(pill.includes('onClicked: pill.requestSurface("styles")'));
     assert(pill.includes('readonly property bool stylesOpen: surface === "styles"'));
+});
+
+check("style row pointer target is above its decorative contents", () => {
+    assert(styleRow.includes("z: 100"));
+    assert(styleRow.includes("acceptedButtons: Qt.LeftButton"));
+    assert(styleRow.includes("onClicked: root.activated()"));
 });
 
 check("Styles surface labels Persona and shows a back affordance", () => {
