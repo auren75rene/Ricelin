@@ -17,17 +17,19 @@
 #
 #   * Every folder in ~/.config/quickshell that holds a shell.qml, apart from
 #     Ricelin's own (pill, launcher, lock). A trailing "-Quickshell" is dropped
-#     from the name, so Persona-Quickshell becomes the style "persona". Dropping
-#     another setup's Quickshell folder in there is all it takes.
-#   * ~/.config/ricelin/styles/<id>.conf, for anything that lives elsewhere:
+#     from the name, so Persona-Quickshell becomes the style "persona".
+#   * RICELIN_PERSONA_DIR (default ~/.config/quickshell/Persona-Quickshell) is
+#     also registered as "persona", even when the config lives elsewhere. This
+#     is the same path used by "qs-toggle persona".
+#   * ~/.config/ricelin/styles/<id>.conf, for any setup that lives elsewhere:
 #
 #         name=Persona
 #         config=~/dotfiles/persona/quickshell      (a config folder), or
 #         path=~/dotfiles/persona/main.qml          (a single entry file)
 #         note=Shown under the name in the pill
 #
-#     A .conf file wins over a folder with the same id. The files are read as
-#     plain text, never run as shell.
+#     A .conf file wins over a discovered folder or the configured Persona path.
+#     The files are read as plain text, never run as shell.
 #
 # Replacing Ricelin's own pill and dock with another setup is not done here yet;
 # a style runs alongside them.
