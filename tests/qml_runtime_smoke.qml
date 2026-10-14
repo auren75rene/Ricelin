@@ -3,6 +3,7 @@ import Quickshell
 import Quickshell.Io
 import "Singletons"
 import "lib/desktopentry.js" as DesktopImport
+import "../configs/quickshell/pill" as Pill
 
 ShellRoot {
     id: root
@@ -10,6 +11,15 @@ ShellRoot {
     property int attempts: 0
     property string testAppId: ""
     property bool launchDispatched: false
+
+    Component {
+        id: addStyleFormComponent
+        Pill.AddStyleSheet {
+            width: 520
+            s: 1
+            visible: false
+        }
+    }
 
     function fail(reason) {
         console.error("RICELIN_QML_RUNTIME_SMOKE_FAIL: " + reason)
@@ -22,6 +32,20 @@ ShellRoot {
     }
 
     Component.onCompleted: {
+        // Compile and instantiate the actual style-registration form in CI.
+        // It stays hidden and submits nothing, so no user's dotfiles are touched.
+        var styleForm = addStyleFormComponent.createObject(null, { width: 520, s: 1, visible: false });
+        if (!styleForm) {
+            fail("AddStyleSheet could not be instantiated");
+            return;
+        }
+        if (styleForm.canAdd) {
+            styleForm.destroy();
+            fail("an empty AddStyleSheet form should not be submittable");
+            return;
+        }
+        styleForm.destroy();
+
         var methods = [
             EnvironmentManager.create,
             EnvironmentManager.openFiles,
