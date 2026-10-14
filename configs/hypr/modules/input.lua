@@ -13,6 +13,8 @@ hl.config({
     },
     cursor = {
         no_hardware_cursors = true,
+        -- Keep the pointer where it is when focus changes to another window.
+        no_warps = true,
     },
     binds = {
         scroll_event_delay = 40,
