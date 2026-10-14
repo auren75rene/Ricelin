@@ -196,8 +196,8 @@ Item {
                         ? root.item.windows[index] : null
                 readonly property bool windowActive:
                     windowRecord && windowRecord.address === Dock.activeAddress
-                readonly property real eccentricity: 0.01
-                readonly property real semiMajorAxis: 26 * root.s
+                readonly property real eccentricity: 0
+                readonly property real semiMajorAxis: 26.6 * root.s
                 readonly property real phase:
                     2 * Math.PI * index / Math.max(1, dotCount)
                 readonly property var orbitalPosition:
