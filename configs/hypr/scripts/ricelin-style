@@ -244,19 +244,19 @@ cmd_add() {
         esac
     done
 
-    target="$(expand "$raw_target")"
-    case "$target" in
+    new_target="$(expand "$raw_target")"
+    case "$new_target" in
         /*) ;;
         *) reject_add "Style path must be absolute" "Choose a path with Browse, or use an absolute path or ~/…."; return 1 ;;
     esac
     if [ "$new_kind" = config ]; then
-        [ -d "$target" ] && [ -f "$target/shell.qml" ] || {
-            reject_add "Not a Quickshell config folder" "$target must be a directory containing shell.qml."
+        [ -d "$new_target" ] && [ -f "$new_target/shell.qml" ] || {
+            reject_add "Not a Quickshell config folder" "$new_target must be a directory containing shell.qml."
             return 1
         }
     else
-        [ -f "$target" ] || {
-            reject_add "Style entry file not found" "$target does not exist or is not a file."
+        [ -f "$new_target" ] || {
+            reject_add "Style entry file not found" "$new_target does not exist or is not a file."
             return 1
         }
     fi
@@ -272,11 +272,11 @@ cmd_add() {
     file="$conf_dir/$new_id.conf"
     tmp="$conf_dir/.$id.conf.$"
     [ ! -e "$file" ] && [ ! -e "$tmp" ] || {
-        reject_add "Style already exists" "A registration file for '$id' already exists."
+        reject_add "Style already exists" "A registration file for '$new_id' already exists."
         return 1
     }
 
-    ( umask 077; printf 'name=%s\n%s=%s\nnote=%s\n' "$new_name" "$new_kind" "$target" "$new_note" >"$tmp" ) || {
+    ( umask 077; printf 'name=%s\n%s=%s\nnote=%s\n' "$new_name" "$new_kind" "$new_target" "$new_note" >"$tmp" ) || {
         rm -f "$tmp"
         reject_add "Cannot register style" "Could not write the registration file."
         return 1
