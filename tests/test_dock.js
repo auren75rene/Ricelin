@@ -351,6 +351,20 @@ check("windowAt rejects missing, fractional and out-of-range indexes", () => {
     assert.strictEqual(D.windowAt(null, 0), null);
 });
 
+console.log("dock glyph sizing");
+check("six status glyphs are slightly larger without changing their cells", () => {
+    assert.ok(dockButtonSrc.includes("property real faceSize: 22 * s"));
+    assert.ok(dockButtonSrc.includes("width: root.faceSize"));
+    assert.strictEqual((dockBodySrc.match(/faceSize: 24 \* root\.s/g) || []).length, 6,
+        "Wi-Fi, Bluetooth, battery, notifications, mixer and monitor use 24 px faces");
+    assert.ok(dockBodySrc.includes('id: gridBtn\n                        s: root.s\n                        tile: root.tile\n                        tileHeight: root.tile\n                        faceSize: 22 * root.s'),
+        "launcher icon retains its original 22 px size");
+    assert.ok(dockButtonSrc.includes("height: tileHeight"),
+        "cell height stays independent from the icon face size");
+    assert.ok(dockButtonSrc.includes("anchors.centerIn: parent"),
+        "larger glyphs remain centered in their existing cells");
+});
+
 console.log("dock hover styling");
 check("missing app icons receive a styled, readable monogram tile", () => {
     assert.ok(dockItemSrc.includes("Missing app artwork gets a deliberate monogram tile"));
