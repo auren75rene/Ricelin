@@ -148,16 +148,28 @@ Singleton {
         return Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : 1;
     }
 
-    /** Click on an app: bring its next window forward, or start it if it has none. */
+    /** Focus a known window, restoring it from the minimized workspace first. */
+    function focusWindow(w, screenName) {
+        if (!w)
+            return;
+        if (w.workspace === "special:minimized")
+            Hyprland.dispatch("movetoworkspace " + root.restoreWorkspace(screenName) + ",address:" + w.address);
+        Hyprland.dispatch("focuswindow address:" + w.address);
+    }
+
+    /** A dock pip focuses that exact window instead of cycling to another one. */
+    function activateWindow(item, index, screenName) {
+        root.focusWindow(DockLib.windowAt(item, index), screenName);
+    }
+
+    /** Click on the app icon: bring its next window forward, or start it if it has none. */
     function activate(item, screenName) {
         var w = DockLib.nextWindow(item, root.activeAddress);
         if (!w) {
             root.launch(item);
             return;
         }
-        if (w.workspace === "special:minimized")
-            Hyprland.dispatch("movetoworkspace " + root.restoreWorkspace(screenName) + ",address:" + w.address);
-        Hyprland.dispatch("focuswindow address:" + w.address);
+        root.focusWindow(w, screenName);
     }
 
     function persist() {
