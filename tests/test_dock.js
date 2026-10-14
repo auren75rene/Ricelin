@@ -168,7 +168,7 @@ check("window beads return smoothly when the cursor leaves", () => {
 });
 check("hover lens hugs the app glyph while beads orbit independently", () => {
     assert.ok(dockBodySrc.includes("var isAppIcon = !!target.item;"));
-    assert.ok(dockBodySrc.includes("var focusSize = isAppIcon ? target.tile * 0.68 : 0;"));
+    assert.ok(dockBodySrc.includes("var focusSize = isAppIcon ? target.tile * 0.82 : 0;"));
     assert.ok(dockBodySrc.includes("var focusOffsetX = isAppIcon ? (target.width - focusSize) / 2 : 0;"));
     assert.ok(dockBodySrc.includes("var focusOffsetY = isAppIcon ? (target.height - focusSize) / 2 : 0;"));
     assert.ok(dockBodySrc.includes("root.lensX = p.x + focusOffsetX - inflate;"));
@@ -185,7 +185,7 @@ check("dock capsule adds vertical orbit clearance at both ends", () => {
     assert.ok(dockBodySrc.includes("y: root.pad + root.orbitRoom"));
 });
 check("window beads clear their own lens, neighboring active tints, and the capsule", () => {
-    assert.ok(dockItemSrc.includes("readonly property real semiMajorAxis: 25 * root.s"));
+    assert.ok(dockItemSrc.includes("readonly property real semiMajorAxis: 26 * root.s"));
     assert.ok(dockItemSrc.includes("readonly property real eccentricity: 0.01"));
     assert.ok(dockItemSrc.includes("x: -12 * root.s"));
     assert.ok(dockItemSrc.includes("width: root.width + 24 * root.s"));
@@ -194,15 +194,15 @@ check("window beads clear their own lens, neighboring active tints, and the caps
     assert.ok(dockItemSrc.includes("root.width + 4 * root.s : -4 * root.s"));
     assert.ok(dockItemSrc.includes("root.height / 2 + orbitalPosition.y - height / 2 + 12 * root.s"));
 
-    const lensHalfSize = (44 * 0.68 + 8) / 2;
+    const lensHalfSize = (44 * 0.82 + 8) / 2;
     const lensCornerRadius = 16;
     const activeTintHalfSize = (44 * 0.68 + 6) / 2;
     const activeTintCornerRadius = 12;
-    const orbitAxis = 25;
+    const orbitAxis = 26;
     const eccentricity = 0.01;
     const maxOrbitRadius = orbitAxis * (1 + eccentricity);
     const activeHaloRadius = 4 * 1.2 / 2;
-    const capsuleHalfWidth = 44 / 2 + 9;
+    const capsuleHalfWidth = 44 / 2 + 9 + 3.5;
     const staticRailCenterRadius = 26;
     const cellPitch = 44 + 4;
     function roundedRectDistance(x, y, halfSize, cornerRadius) {
