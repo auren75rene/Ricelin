@@ -20,7 +20,9 @@ PillSurface {
     mRight: 19
     mBottom: 16
 
-    implicitHeight: content.implicitHeight
+    property bool adding: false
+
+    implicitHeight: root.adding ? addSheet.implicitHeight : content.implicitHeight
 
     /** Asks the pill to show another surface (the wallpaper strip). */
     signal requestSurface(string name)
@@ -44,6 +46,14 @@ PillSurface {
                 active: st.running
             });
         }
+        out.push({
+            kind: "add",
+            id: "",
+            name: "Add style",
+            sub: "Register another Quickshell setup",
+            glyph: "plus",
+            active: false
+        });
         return out;
     }
 
@@ -51,14 +61,19 @@ PillSurface {
         var r = root.rows[i];
         if (!r)
             return;
-        if (r.kind === "wallpaper")
+        if (r.kind === "wallpaper") {
             root.requestSurface("wallpaper");
-        else
+        } else if (r.kind === "add") {
+            addSheet.reset();
+            root.adding = true;
+        } else {
             Styles.choose(r.id);
+        }
     }
 
     onOpenChanged: {
         if (open) {
+            root.adding = false;
             root.cursor = 0;
             Styles.refresh();
             keys.forceActiveFocus();
@@ -76,7 +91,8 @@ PillSurface {
     Item {
         id: keys
         anchors.fill: parent
-        focus: root.open
+        focus: root.open && !root.adding
+        enabled: !root.adding
         Keys.onPressed: event => {
             if (event.key === Qt.Key_Up) {
                 root.cursor = Math.max(0, root.cursor - 1);
@@ -95,6 +111,7 @@ PillSurface {
         id: content
         width: parent.width
         spacing: 0
+        visible: !root.adding
 
         Item {
             width: parent.width
@@ -168,11 +185,28 @@ PillSurface {
             topPadding: 8 * root.s
             visible: Styles.list.length === 0
             wrapMode: Text.WordWrap
-            text: "No extra styles discovered. Put a Quickshell config with shell.qml in ~/.config/quickshell/<name>, or add ~/.config/ricelin/styles/<id>.conf for a config stored elsewhere. Persona also follows RICELIN_PERSONA_DIR."
+            text: "No extra styles yet. Use Add style to register a Quickshell folder or entry file; its dotfiles stay where they are."
             color: Theme.faint
             font.family: Theme.font
             font.pixelSize: 10.5 * root.s
             lineHeight: 1.3
+        }
+    }
+
+    AddStyleSheet {
+        id: addSheet
+        width: parent.width
+        s: root.s
+        visible: root.adding
+        onCancelled: {
+            root.adding = false;
+            keys.forceActiveFocus();
+        }
+        onAdded: {
+            root.adding = false;
+            root.cursor = 0;
+            Styles.refresh();
+            keys.forceActiveFocus();
         }
     }
 }
