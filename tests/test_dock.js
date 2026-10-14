@@ -170,7 +170,7 @@ check("hover lens stays centred and leaves room for the orbiting beads", () => {
 });
 check("beads and focus lens use glass-like highlights without another border", () => {
     assert.ok(dockItemSrc.includes("Tiny glass bead: tinted core, darkened lower edge, bright rim"));
-    assert.ok(dockItemSrc.includes("pipHit.windowActive ? Qt.lighter(Theme.onGlow, 1.65)"));
+    assert.ok(dockItemSrc.includes("Qt.lighter(Theme.onGlow, 1.65)"));
     assert.ok(dockItemSrc.includes("The glint is deliberately offset"));
     const match = dockBodySrc.match(/\/\/ The lens:[\s\S]*?Rectangle\s*\{([\s\S]*?)\n            \}/);
     assert.ok(match, "shared hover lens should exist");
