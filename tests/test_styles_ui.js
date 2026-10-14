@@ -43,9 +43,8 @@ check("Styles includes an Add style row and form", () => {
     assert(styles.includes("addSheet.reset()"));
     assert(styles.includes("root.adding = true"));
     assert(addStyle.includes('label: root.entryType === "config" ? "Config folder" : "Entry file"'));
-    assert(addStyle.includes("AppLauncher") === false);
     assert(labeledField.includes("AppLauncher.pickFolder(cb)"));
-    assert(labeledField.includes("AppLauncher.pickFile(cb)"));
+    assert(labeledField.includes('AppLauncher.pickFile(cb, "Select QML entry file")'));
     assert(addStyle.includes("Styles.registerStyle"));
     assert(stylesSingleton.includes('root.run(["add", id, name, kind, target, note || ""])'));
 });
