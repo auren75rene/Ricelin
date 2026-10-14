@@ -168,7 +168,7 @@ check("window beads return smoothly when the cursor leaves", () => {
 });
 check("hover lens hugs the app glyph while beads orbit independently", () => {
     assert.ok(dockBodySrc.includes("var isAppIcon = !!target.item;"));
-    assert.ok(dockBodySrc.includes("var focusSize = isAppIcon ? target.tile * 0.82 : 0;"));
+    assert.ok(dockBodySrc.includes("var focusSize = isAppIcon ? target.tile * 0.68 : 0;"));
     assert.ok(dockBodySrc.includes("var focusOffsetX = isAppIcon ? (target.width - focusSize) / 2 : 0;"));
     assert.ok(dockBodySrc.includes("var focusOffsetY = isAppIcon ? (target.height - focusSize) / 2 : 0;"));
     assert.ok(dockBodySrc.includes("root.lensX = p.x + focusOffsetX - inflate;"));
@@ -184,8 +184,8 @@ check("dock capsule adds vertical orbit clearance at both ends", () => {
     assert.ok(dockBodySrc.includes("radius: 30 * root.s"));
     assert.ok(dockBodySrc.includes("y: root.pad + root.orbitRoom"));
 });
-check("window beads stay outside the rounded focus frame and inside the dock", () => {
-    assert.ok(dockItemSrc.includes("readonly property real semiMajorAxis: 28.3 * root.s"));
+check("window beads clear their own lens, neighboring active tints, and the capsule", () => {
+    assert.ok(dockItemSrc.includes("readonly property real semiMajorAxis: 25 * root.s"));
     assert.ok(dockItemSrc.includes("readonly property real eccentricity: 0.01"));
     assert.ok(dockItemSrc.includes("x: -12 * root.s"));
     assert.ok(dockItemSrc.includes("width: root.width + 24 * root.s"));
@@ -194,20 +194,30 @@ check("window beads stay outside the rounded focus frame and inside the dock", (
     assert.ok(dockItemSrc.includes("root.width + 4 * root.s : -4 * root.s"));
     assert.ok(dockItemSrc.includes("root.height / 2 + orbitalPosition.y - height / 2 + 12 * root.s"));
 
-    const lensHalfSize = (44 * 0.82 + 8) / 2;
+    const lensHalfSize = (44 * 0.68 + 8) / 2;
     const lensCornerRadius = 16;
     const lensCornerReach = Math.SQRT2 * (lensHalfSize - lensCornerRadius + lensCornerRadius / Math.SQRT2);
-    const minOrbitRadius = 28.3 * (1 - 0.01);
-    const maxOrbitRadius = 28.3 * (1 + 0.01);
+    const activeTintHalfSize = (44 * 0.68 + 6) / 2;
+    const minOrbitRadius = 25 * (1 - 0.01);
+    const maxOrbitRadius = 25 * (1 + 0.01);
+    const maxVerticalRadius = 25 * Math.sqrt(1 - 0.01 * 0.01);
     const activeHaloRadius = 4 * 1.2 / 2;
     const capsuleHalfWidth = 44 / 2 + 9;
     const staticRailCenterRadius = 26;
+    const cellPitch = 44 + 4;
+    const neighbourCenterDistance = cellPitch - maxVerticalRadius;
     assert.ok(minOrbitRadius - activeHaloRadius > lensCornerReach,
-        "active bead halo must clear the rounded corners throughout its orbit");
-    assert.ok(maxOrbitRadius + activeHaloRadius < capsuleHalfWidth,
-        "active bead halo must remain inside the glass capsule");
-    assert.ok(staticRailCenterRadius - activeHaloRadius > lensHalfSize,
-        "active bead halo must clear the focus frame on the resting rail");
+        "active bead halo must clear its own rounded lens throughout the orbit");
+    assert.ok(neighbourCenterDistance - activeHaloRadius > activeTintHalfSize,
+        "active bead halo must not intrude into the adjacent app's active tint");
+    assert.ok(capsuleHalfWidth - maxOrbitRadius - activeHaloRadius > 1,
+        "active bead halo must keep visible clearance from the glass capsule side");
+    assert.ok(9 + 12 + 44 / 2 - maxOrbitRadius - activeHaloRadius > 1,
+        "active bead halo must clear the rounded capsule ends");
+    assert.ok(staticRailCenterRadius - activeHaloRadius > activeTintHalfSize,
+        "active bead halo must clear the compact active tint on the resting rail");
+    assert.ok(dockItemSrc.includes("width: iconBox.width + 6 * root.s"));
+    assert.ok(dockItemSrc.includes("radius: 12 * root.s"));
     assert.ok(dockItemSrc.includes("width: 10 * root.s"),
         "keep the larger invisible hit targets for easy clicking");
 });
@@ -307,7 +317,7 @@ check("focused app backing has no nested border", () => {
 });
 check("persistent active tint stays compact around the icon", () => {
     assert.ok(dockItemSrc.includes("anchors.centerIn: iconBox"));
-    assert.ok(dockItemSrc.includes("width: iconBox.width + 14 * root.s"));
+    assert.ok(dockItemSrc.includes("width: iconBox.width + 6 * root.s"));
     assert.ok(dockItemSrc.includes("height: width"));
 });
 check("shared hover lens keeps the single moving outline", () => {
