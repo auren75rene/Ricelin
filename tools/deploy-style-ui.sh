@@ -14,6 +14,7 @@ hypr/scripts/qs-toggle.sh
 quickshell/pill/Pill.qml
 quickshell/pill/Settings.qml
 quickshell/pill/StylesSurface.qml
+quickshell/pill/StyleRow.qml
 quickshell/pill/AddStyleSheet.qml
 quickshell/pill/LabeledField.qml
 quickshell/pill/DockBody.qml
