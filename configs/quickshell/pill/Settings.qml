@@ -16,6 +16,7 @@ SettingsSurface {
     rows: [
         { item: appearanceRow, kind: "nav", surface: "appearance" },
         { item: lookRow, kind: "nav", surface: "look" },
+        { item: stylesRow, kind: "nav", surface: "styles" },
         { item: displayRow, kind: "nav", surface: "display" },
         { item: inputRow, kind: "nav", surface: "input" },
         { item: animationRow, kind: "nav", surface: "animation" },
@@ -68,6 +69,23 @@ SettingsSurface {
                 height: 16 * root.s
                 name: "chevron-right"
                 color: root.focusRowItem === lookRow ? Theme.cream : Theme.iconDim
+                stroke: 2.2
+            }
+        }
+
+        SettingsRow {
+            id: stylesRow
+            surface: root
+            captionOnFocus: true
+            icon: "palette"
+            name: "Styles & Persona"
+            sub: "Persona and other Quickshell themes"
+
+            GlyphIcon {
+                width: 16 * root.s
+                height: 16 * root.s
+                name: "chevron-right"
+                color: root.focusRowItem === stylesRow ? Theme.cream : Theme.iconDim
                 stroke: 2.2
             }
         }
