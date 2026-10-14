@@ -163,6 +163,14 @@ function nextWindow(item, activeAddress) {
     return ws[0];
 }
 
+/** Return the specific grouped window associated with a dock pip, or null for an invalid index. */
+function windowAt(item, index) {
+    var ws = item && item.windows ? item.windows : [];
+    if (typeof index !== "number" || index % 1 !== 0 || index < 0 || index >= ws.length)
+        return null;
+    return ws[index] || null;
+}
+
 /** Pinned list with `id` added at the end, or removed if already there. */
 function togglePin(pinned, id) {
     var want = norm(id);
