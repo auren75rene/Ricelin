@@ -221,7 +221,7 @@ Item {
             label: root.entryType === "config" ? "Config folder" : "Entry file"
             text: root.target
             placeholder: root.entryType === "config" ? "Folder containing shell.qml" : "Path to the main QML file"
-            browse: root.entryType === "config" ? "folder" : "file"
+            browse: root.entryType === "config" ? "folder" : "qml"
             onTextChanged: root.target = text
             onCommitted: (value) => root.targetPicked(value)
         }
