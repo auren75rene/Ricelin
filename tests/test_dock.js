@@ -192,19 +192,26 @@ check("app focus has a minimum visual size and clears the Writer divider", () =>
     assert.ok(dockBodySrc.includes("tail.height - gap - root.dividerClearance"));
     assert.ok(!dockBodySrc.includes("x: -3.5 * root.s"),
         "the app column must not be shifted off the capsule centreline");
-    assert.ok(dockSingletonSrc.includes("readonly property real padPx: 14"));
+    assert.ok(dockSingletonSrc.includes("readonly property real sidePadPx: 14"));
+    assert.ok(dockSingletonSrc.includes("readonly property real padPx: 9"));
 
     const tile = 44;
-    const pad = 14;
+    const sidePad = 14;
+    const tileVerticalPad = 9;
     const appShift = 0;
     const focusHeight = tile * 0.82 + 8;
     const focusHalf = focusHeight / 2;
-    const appLeftClearance = pad + tile / 2 - appShift - focusHalf;
-    const capsuleHalfWidth = tile / 2 + pad;
-    const appCenterFromCapsuleLeft = pad + tile / 2;
+    const appLeftClearance = sidePad + tile / 2 - appShift - focusHalf;
+    const capsuleHalfWidth = tile / 2 + sidePad;
+    const appCenterFromCapsuleLeft = sidePad + tile / 2;
     const dividerGap = 4 + 5 - (focusHeight - tile) / 2;
     assert.strictEqual(appCenterFromCapsuleLeft, capsuleHalfWidth,
         "the app icon center must coincide with the capsule centerline");
+    assert.strictEqual(tileVerticalPad, 9,
+        "horizontal pip clearance must not alter the established vertical inset");
+    assert.ok(dockBodySrc.includes("readonly property real bodyW: tile + 2 * sidePad"));
+    assert.ok(dockBodySrc.includes("x: root.sidePad"));
+    assert.ok(dockSingletonSrc.includes("footprintPx: edgePx + tilePx + 2 * sidePadPx"));
     assert.ok(appLeftClearance > 5,
         "the larger focus layer must remain clear of the capsule's inner left border");
     assert.ok(dividerGap > 8.8,
