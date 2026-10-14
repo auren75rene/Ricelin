@@ -203,7 +203,7 @@ Item {
                 readonly property real orbitX:
                     root.width / 2 + orbitalPosition.x - width / 2 + 12 * root.s
                 readonly property real orbitY:
-                    root.height / 2 + orbitalPosition.y - height / 2 + 8 * root.s
+                    root.height / 2 + orbitalPosition.y - height / 2 + 12 * root.s
 
                 property real orbitMix: root.hovered ? 1 : 0
                 Behavior on orbitMix {
