@@ -144,8 +144,9 @@ Item {
             root.orbitBurstProgress = 0;
             orbitBurst.start();
         } else if (!root.hovered) {
+            // Freeze the sweep where it is. orbitMix eases the dots back to
+            // their rail, instead of snapping to the end of the orbit first.
             orbitBurst.stop();
-            root.orbitBurstProgress = 1;
         }
     }
 
@@ -178,8 +179,8 @@ Item {
                         ? root.item.windows[index] : null
                 readonly property bool windowActive:
                     windowRecord && windowRecord.address === Dock.activeAddress
-                readonly property real eccentricity: 0.10
-                readonly property real semiMajorAxis: 19.5 * root.s
+                readonly property real eccentricity: 0.05
+                readonly property real semiMajorAxis: 18.5 * root.s
                 readonly property real phase:
                     2 * Math.PI * index / Math.max(1, dotCount)
                 readonly property var orbitalPosition:
