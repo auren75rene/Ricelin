@@ -280,7 +280,7 @@ Item {
             TextButton {
                 label: root.saving ? "Adding…" : "Add style"
                 primary: true
-                enabled: root.canAdd && !Styles.busy
+                available: root.canAdd && !Styles.busy
                 onClicked: root.submit()
             }
         }
