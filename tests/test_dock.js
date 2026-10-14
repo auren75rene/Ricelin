@@ -166,7 +166,7 @@ check("window beads return smoothly when the cursor leaves", () => {
 });
 check("hover lens hugs the app glyph while beads orbit independently", () => {
     assert.ok(dockBodySrc.includes("var isAppIcon = !!target.item;"));
-    assert.ok(dockBodySrc.includes("var focusSize = isAppIcon ? target.tile * 0.68 : 0;"));
+    assert.ok(dockBodySrc.includes("var focusSize = isAppIcon ? target.tile * 0.82 : 0;"));
     assert.ok(dockBodySrc.includes("var focusOffsetX = isAppIcon ? (target.width - focusSize) / 2 : 0;"));
     assert.ok(dockBodySrc.includes("var focusOffsetY = isAppIcon ? (target.height - focusSize) / 2 : 0;"));
     assert.ok(dockBodySrc.includes("root.lensX = p.x + focusOffsetX - inflate;"));
@@ -230,7 +230,7 @@ check("focused app backing has no nested border", () => {
 });
 check("persistent active tint stays compact around the icon", () => {
     assert.ok(dockItemSrc.includes("anchors.centerIn: iconBox"));
-    assert.ok(dockItemSrc.includes("width: iconBox.width + 8 * root.s"));
+    assert.ok(dockItemSrc.includes("width: iconBox.width + 14 * root.s"));
     assert.ok(dockItemSrc.includes("height: width"));
 });
 check("shared hover lens keeps the single moving outline", () => {
