@@ -41,8 +41,13 @@ Item {
         Behavior on color { ColorAnimation { duration: Motion.fast } }
     }
 
+    // Keep the click target above the icon/text/decorative siblings. Otherwise
+    // those children can visually cover the target and make rows look clickable
+    // while a pointer click never reaches the activation signal.
     MouseArea {
+        z: 100
         anchors.fill: parent
+        acceptedButtons: Qt.LeftButton
         cursorShape: Qt.PointingHandCursor
         onClicked: root.activated()
     }
