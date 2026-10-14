@@ -24,6 +24,7 @@ Item {
     property real tile: 44 * s
 
     signal activated()
+    signal windowActivated(int index)
     signal launchNew()
     signal pinToggled()
     signal hoverChanged(bool on)
@@ -34,10 +35,12 @@ Item {
         if (!item)
             return "";
         var parts = [];
-        if (item.running > 1)
+        if (item.running > 1) {
             parts.push(item.running + " windows");
-        else if (item.running === 1)
+            parts.push("Click a pip to focus that window");
+        } else if (item.running === 1) {
             parts.push(item.minimized ? "Minimized" : "Open");
+        }
         parts.push("Right-click to " + (item.pinned ? "unpin" : "pin"));
         return parts.join("  ·  ");
     }
@@ -108,25 +111,54 @@ Item {
         }
     }
 
-    // One pip per open window (three at most), on the edge of the dock that
-    // faces the screen edge.
+    // One pip per window (three visible at most). Each row has a separate
+    // click target, mapping directly to that window; the marker itself remains
+    // tiny, while its hit area is large enough to use reliably.
     Column {
-        x: Dock.onRight ? root.width - width + 3.5 * root.s : -3.5 * root.s
+        id: pips
+        width: 12 * root.s
+        x: Dock.onRight
+            ? root.width + 1.5 * root.s - width / 2
+            : -1.5 * root.s - width / 2
         anchors.verticalCenter: parent.verticalCenter
-        spacing: 3 * root.s
+        spacing: 1 * root.s
         visible: root.item && root.item.running > 0
+        z: 2
 
         Repeater {
             model: root.item ? Math.min(3, root.item.running) : 0
 
-            Rectangle {
+            delegate: Item {
+                id: pipHit
                 required property int index
-                width: 4 * root.s
-                height: (root.item && root.item.active && index === 0 ? 10 : 4) * root.s
-                radius: width / 2
-                color: root.item && root.item.active ? Theme.onGlow : Qt.alpha(Theme.cream, 0.7)
-                opacity: root.item && root.item.minimized ? 0.45 : 1
-                Behavior on height { NumberAnimation { duration: Motion.fast } }
+                width: pips.width
+                height: 10 * root.s
+
+                readonly property var windowRecord:
+                    root.item && root.item.windows && index < root.item.windows.length
+                        ? root.item.windows[index] : null
+
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: 4 * root.s
+                    height: pipHit.windowRecord
+                        && pipHit.windowRecord.address === Dock.activeAddress
+                        ? 9 * root.s : 4 * root.s
+                    radius: width / 2
+                    color: pipHit.windowRecord
+                        && pipHit.windowRecord.address === Dock.activeAddress
+                        ? Theme.onGlow : Qt.alpha(Theme.cream, 0.7)
+                    opacity: pipHit.windowRecord
+                        && pipHit.windowRecord.workspace === "special:minimized" ? 0.45 : 1
+                    Behavior on height { NumberAnimation { duration: Motion.fast } }
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    acceptedButtons: Qt.LeftButton
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.windowActivated(pipHit.index)
+                }
             }
         }
     }
