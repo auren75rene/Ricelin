@@ -205,8 +205,8 @@ check("app focus has a minimum visual size and clears the Writer divider", () =>
         "Writer's focus layer must have at least 8.8 logical pixels before the divider");
 });
 check("window beads clear their own lens, neighboring active tints, and the capsule", () => {
-    assert.ok(dockItemSrc.includes("readonly property real semiMajorAxis: 26 * root.s"));
-    assert.ok(dockItemSrc.includes("readonly property real eccentricity: 0.01"));
+    assert.ok(dockItemSrc.includes("readonly property real semiMajorAxis: 26.6 * root.s"));
+    assert.ok(dockItemSrc.includes("readonly property real eccentricity: 0"));
     assert.ok(dockItemSrc.includes("x: -12 * root.s"));
     assert.ok(dockItemSrc.includes("width: root.width + 24 * root.s"));
     assert.ok(dockItemSrc.includes("width: pipHit.windowActive ? 4 * root.s : 3 * root.s"));
@@ -215,11 +215,11 @@ check("window beads clear their own lens, neighboring active tints, and the caps
     assert.ok(dockItemSrc.includes("root.height / 2 + orbitalPosition.y - height / 2 + 12 * root.s"));
 
     const lensHalfSize = (44 * 0.82 + 8) / 2;
-    const lensCornerRadius = 16;
+    const lensCornerRadius = 19.5;
     const activeTintHalfSize = (44 * 0.68 + 6) / 2;
     const activeTintCornerRadius = 12;
-    const orbitAxis = 26;
-    const eccentricity = 0.01;
+    const orbitAxis = 26.6;
+    const eccentricity = 0;
     const maxOrbitRadius = orbitAxis * (1 + eccentricity);
     const activeHaloRadius = 4 * 1.2 / 2;
     const capsuleHalfWidth = 44 / 2 + 9 + 3.5;
@@ -298,7 +298,7 @@ check("hover lens contracts into a small centered shape when pointer leaves", ()
     assert.ok(dockBodySrc.includes("var collapsedSize = 8 * root.s;"));
     assert.ok(dockBodySrc.includes("root.lensW = collapsedSize;"));
     assert.ok(dockBodySrc.includes("root.lensH = collapsedSize;"));
-    assert.ok(dockBodySrc.includes("radius: Math.min(16 * root.s, width / 2, height / 2)"));
+    assert.ok(dockBodySrc.includes("radius: Math.min(root.lensTarget && root.lensTarget.item ? 19.5 * root.s : 16 * root.s, width / 2, height / 2)"));
     assert.ok(dockBodySrc.includes("Behavior on width"));
     assert.ok(dockBodySrc.includes("Behavior on height"));
 });
