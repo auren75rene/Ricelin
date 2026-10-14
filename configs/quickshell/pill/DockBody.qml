@@ -41,7 +41,8 @@ Item {
     // Extra vertical breathing room keeps the orbiting beads away from adjacent
     // app focus frames and from the capsule's rounded ends.
     readonly property real orbitRoom: 12 * s
-    readonly property real bodyW: tile + 2 * pad
+    readonly property real sidePad: Dock.sidePadPx * s
+    readonly property real bodyW: tile + 2 * sidePad
     /** Room to the right of the capsule for the hint bubble. */
     readonly property real hintRoom: 300 * s
 
@@ -172,7 +173,7 @@ Item {
 
             Column {
                 id: stack
-                x: root.pad
+                x: root.sidePad
                 y: root.pad + root.orbitRoom
                 width: root.tile
                 // Preserve a deliberate clear zone below Writer before the
