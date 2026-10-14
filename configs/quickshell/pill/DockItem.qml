@@ -112,21 +112,45 @@ Item {
         }
     }
 
-    // Mean anomaly advances uniformly while this app is focused. Each dot's
-    // position is derived by solving Kepler's equation for an elliptical orbit:
-    // it naturally travels faster near periapsis and slower near apoapsis.
-    property real orbitMeanAnomaly: 0
+    // Hover triggers one orbital flourish, not a perpetual animation. The
+    // first 250 ms accelerate hard; the final leg decelerates into a quiet orbit.
+    // The dots stay around the icon while hovered and return to the outer rail
+    // when the pointer leaves.
+    property real orbitBurstProgress: 0
 
-    NumberAnimation on orbitMeanAnomaly {
-        from: 0
-        to: 2 * Math.PI
-        duration: 2400
-        loops: Animation.Infinite
-        running: !!(root.item && root.item.active)
+    SequentialAnimation {
+        id: orbitBurst
+        NumberAnimation {
+            target: root
+            property: "orbitBurstProgress"
+            from: 0
+            to: 0.78
+            duration: 250
+            easing.type: Easing.InCubic
+        }
+        NumberAnimation {
+            target: root
+            property: "orbitBurstProgress"
+            from: 0.78
+            to: 1
+            duration: 360
+            easing.type: Easing.OutCubic
+        }
     }
 
-    // A dot per open window (up to three). On focus they orbit the icon as a
-    // small planetary system; on blur they ease back to their static pip rail.
+    onHoveredChanged: {
+        if (root.hovered && root.item && root.item.running > 0) {
+            orbitBurst.stop();
+            root.orbitBurstProgress = 0;
+            orbitBurst.start();
+        } else if (!root.hovered) {
+            orbitBurst.stop();
+            root.orbitBurstProgress = 1;
+        }
+    }
+
+    // A dot per open window (up to three). Cursor hover sends the dots through
+    // one fast Kepler-style sweep, then leaves them parked around the icon.
     Item {
         id: pips
         // Extend beyond the tile so pip hit-targets remain valid at the outer
@@ -159,8 +183,9 @@ Item {
                 readonly property real phase:
                     2 * Math.PI * index / Math.max(1, dotCount)
                 readonly property var orbitalPosition:
-                    DockLib.orbitPosition(root.orbitMeanAnomaly + phase,
-                                          semiMajorAxis, eccentricity)
+                    DockLib.orbitPosition(
+                        phase + root.orbitBurstProgress * 2 * Math.PI * 1.25,
+                        semiMajorAxis, eccentricity)
 
                 readonly property real staticX:
                     (Dock.onRight ? root.width + 1.5 * root.s : -1.5 * root.s)
@@ -175,7 +200,7 @@ Item {
                 readonly property real orbitY:
                     root.height / 2 + orbitalPosition.y - height / 2 + 8 * root.s
 
-                property real orbitMix: root.item && root.item.active ? 1 : 0
+                property real orbitMix: root.hovered ? 1 : 0
                 Behavior on orbitMix {
                     NumberAnimation {
                         duration: Motion.morph
@@ -187,22 +212,53 @@ Item {
                 x: staticX + (orbitX - staticX) * orbitMix
                 y: staticY + (orbitY - staticY) * orbitMix
 
+                // Tiny glass bead: tinted core, darkened lower edge, bright rim,
+                // a specular catchlight and a restrained halo for focused windows.
                 Rectangle {
+                    id: bead
                     anchors.centerIn: parent
                     width: pipHit.windowActive ? 5 * root.s : 4 * root.s
                     height: width
                     radius: width / 2
-                    color: pipHit.windowActive
-                        ? Theme.onGlow : Qt.alpha(Theme.cream, 0.7)
+                    gradient: Gradient {
+                        GradientStop {
+                            position: 0
+                            color: pipHit.windowActive
+                                ? Qt.lighter(Theme.onGlow, 1.65) : Qt.alpha(Theme.bright, 0.98)
+                        }
+                        GradientStop {
+                            position: 0.42
+                            color: pipHit.windowActive
+                                ? Theme.onGlow : Qt.alpha(Theme.cream, 0.76)
+                        }
+                        GradientStop {
+                            position: 1
+                            color: pipHit.windowActive
+                                ? Qt.darker(Theme.onGlow, 1.45) : Qt.alpha(Theme.subtle, 0.62)
+                        }
+                    }
+                    border.width: 0.7 * root.s
+                    border.color: Qt.alpha(Theme.bright, pipHit.windowActive ? 0.92 : 0.48)
                     opacity: pipHit.windowRecord
                         && pipHit.windowRecord.workspace === "special:minimized" ? 0.45 : 1
 
+                    // The glint is deliberately offset; a centered flat dot reads
+                    // like paint, while this reads as a tiny lens catching light.
+                    Rectangle {
+                        x: parent.width * 0.18
+                        y: parent.height * 0.16
+                        width: parent.width * 0.42
+                        height: Math.max(0.8 * root.s, parent.height * 0.24)
+                        radius: height / 2
+                        color: Qt.alpha(Theme.bright, pipHit.windowActive ? 0.96 : 0.72)
+                    }
+
                     Rectangle {
                         anchors.centerIn: parent
-                        width: parent.width * 2.4
+                        width: parent.width * 2.5
                         height: width
                         radius: width / 2
-                        color: Qt.alpha(Theme.onGlow, 0.20)
+                        color: Qt.alpha(Theme.onGlow, 0.18)
                         visible: pipHit.windowActive
                         z: -1
                     }
