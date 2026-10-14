@@ -180,7 +180,7 @@ check("glass lens keeps one outline and no refraction streaks", () => {
     assert.ok(dockItemSrc.includes("Tiny glass bead: tinted core, darkened lower edge, bright rim"));
     assert.ok(dockItemSrc.includes("Qt.lighter(Theme.onGlow, 1.65)"));
     assert.ok(dockItemSrc.includes("The glint is deliberately offset"));
-    const match = dockBodySrc.match(/\\/\\/ The lens:[\\s\\S]*?Rectangle\\s*\\{([\\s\\S]*?)\\n            \\}/);
+    const match = dockBodySrc.match(/\/\/ The lens:[\s\S]*?Rectangle\s*\{([\s\S]*?)\n            \}/);
     assert.ok(match, "shared hover lens should exist");
     assert.ok(match[1].includes("GradientStop { position: 0; color: Qt.alpha(Theme.bright, 0.15) }"));
     assert.ok(match[1].includes("border.width: 1"));
