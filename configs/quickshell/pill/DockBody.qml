@@ -232,6 +232,7 @@ Item {
                             visible: root.wifiPresent
                             s: root.s
                             tile: root.tile
+                            faceSize: 24 * root.s
                             wifi: true
                             wifiLevel: root.wifiLevel
                             wifiOn: root.wifiOn
@@ -246,6 +247,7 @@ Item {
                             visible: root.btPresent
                             s: root.s
                             tile: root.tile
+                            faceSize: 24 * root.s
                             glyph: "bluetooth"
                             tint: Peripherals.connectedCount > 0 ? Theme.vermLit
                                 : (root.btOn ? Theme.iconDim : Qt.alpha(Theme.iconDim, 0.4))
@@ -260,6 +262,7 @@ Item {
                             visible: Battery.present
                             s: root.s
                             tile: root.tile
+                            faceSize: 24 * root.s
                             faceVerticalOffset: -4
                             glyph: "battery"
                             caption: Battery.pct + "%"
@@ -273,6 +276,7 @@ Item {
                             id: inboxBtn
                             s: root.s
                             tile: root.tile
+                            faceSize: 24 * root.s
                             glyph: "inbox"
                             badge: Notifs.unread > 0
                             onClicked: root.surfaceRequested("link")
@@ -284,6 +288,7 @@ Item {
                             id: mixerBtn
                             s: root.s
                             tile: root.tile
+                            faceSize: 24 * root.s
                             glyph: "mixer"
                             onClicked: root.surfaceRequested("mixer")
                             onHoverChanged: (on) => root.hover(mixerBtn, on, "Sound & display", "Volume, mic, brightness, vibrance, keyboard light")
@@ -293,6 +298,7 @@ Item {
                             id: sysBtn
                             s: root.s
                             tile: root.tile
+                            faceSize: 24 * root.s
                             glyph: "monitor"
                             onClicked: root.surfaceRequested("sysmon")
                             onHoverChanged: (on) => root.hover(sysBtn, on, "System", "CPU, GPU, memory and storage")
