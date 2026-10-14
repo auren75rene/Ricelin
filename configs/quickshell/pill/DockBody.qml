@@ -35,6 +35,9 @@ Item {
     readonly property real pad: Dock.padPx * s
     readonly property real tile: Dock.tilePx * s
     readonly property real gap: 4 * s
+    // Extra separation before the app/status divider keeps the settled Writer
+    // focus outline and its border clear of the line.
+    readonly property real dividerClearance: 5 * s
     // Extra vertical breathing room keeps the orbiting beads away from adjacent
     // app focus frames and from the capsule's rounded ends.
     readonly property real orbitRoom: 12 * s
@@ -46,7 +49,7 @@ Item {
     readonly property rect capsule: Qt.rect(body.x, body.y, body.width, body.height)
 
     /** How many app slots fit above the cluster on this screen. */
-    readonly property int maxApps: Math.max(1, Math.floor((height - 2 * edge - 2 * pad - tail.height - gap) / (tile + gap)))
+    readonly property int maxApps: Math.max(1, Math.floor((height - 2 * edge - 2 * pad - tail.height - gap - root.dividerClearance) / (tile + gap)))
 
     // ---- hover: one lens, one hint ---------------------------------------------
 
@@ -94,7 +97,9 @@ Item {
 
         // App focus hugs the glyph, not the whole clickable tile. The window
         // beads orbit outside this compact frame and keep their own hit targets.
-        var focusSize = isAppIcon ? target.tile * 0.68 : 0;
+        // Fixed proportion of the tile, never the artwork's glyph bounds: this
+        // gives small fallback monograms a proper ~48 px focus layer at 1200p.
+        var focusSize = isAppIcon ? target.tile * 0.82 : 0;
         var focusOffsetX = isAppIcon ? (target.width - focusSize) / 2 : 0;
         var focusOffsetY = isAppIcon ? (target.height - focusSize) / 2 : 0;
 
@@ -170,12 +175,18 @@ Item {
                 x: root.pad
                 y: root.pad + root.orbitRoom
                 width: root.tile
-                spacing: root.gap
+                // Preserve a deliberate clear zone below Writer before the
+                // divider, including while the shared focus lens contracts.
+                spacing: root.gap + root.dividerClearance
 
                 // Pinned and running apps. Delegates are keyed by slot, not by app,
                 // so a focus change or a new window never rebuilds the whole list.
                 Column {
                     id: apps
+                    // Pull only the app row inward: the right-side orbital pips
+                    // need more clearance from the capsule border, while the
+                    // status controls keep their existing alignment.
+                    x: -3.5 * root.s
                     width: parent.width
                     spacing: root.gap
 
