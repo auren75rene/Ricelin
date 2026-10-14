@@ -3,7 +3,7 @@ import Quickshell
 import Quickshell.Io
 import "Singletons"
 import "lib/desktopentry.js" as DesktopImport
-import "../configs/quickshell/pill" as Pill
+import "Pill" as Pill
 
 ShellRoot {
     id: root
