@@ -211,7 +211,7 @@ check("status controls use equal-height cells and reserve space for battery text
 });
 
 check("glass lens keeps one outline and no refraction streaks", () => {
-    assert.ok(dockItemSrc.includes("Tiny glass bead: tinted core, darkened lower edge, bright rim"));
+    assert.ok(dockItemSrc.includes("Compact glass bead: tinted core, darkened lower edge, bright rim"));
     assert.ok(dockItemSrc.includes("Qt.lighter(Theme.onGlow, 1.65)"));
     assert.ok(dockItemSrc.includes("The glint is deliberately offset"));
     const match = dockBodySrc.match(/\/\/ The lens:[\s\S]*?Rectangle\s*\{([\s\S]*?)\n            \}/);
