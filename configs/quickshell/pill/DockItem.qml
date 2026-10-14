@@ -84,13 +84,26 @@ Item {
         // Minimized and not-running apps are a touch quieter than open ones.
         opacity: root.item && root.item.running > 0 && !root.item.minimized ? 1 : (root.item && root.item.minimized ? 0.62 : 0.9)
 
+        // Missing app artwork gets a deliberate monogram tile instead of a
+        // lone letter floating on the dock background.
+        Rectangle {
+            visible: !icon.visible
+            anchors.centerIn: parent
+            width: parent.width * 0.84
+            height: width
+            radius: 7 * root.s
+            color: Qt.alpha(Theme.onGlow, 0.18)
+            border.width: 0.8 * root.s
+            border.color: Qt.alpha(Theme.bright, 0.24)
+        }
+
         Text {
             anchors.centerIn: parent
             visible: !icon.visible
             text: root.title.length > 0 ? root.title.charAt(0).toUpperCase() : "?"
             color: Theme.cream
             font.family: Theme.font
-            font.pixelSize: root.tile * 0.42
+            font.pixelSize: root.tile * 0.48
             font.weight: Font.DemiBold
         }
 
