@@ -242,9 +242,10 @@ Singleton {
         }
     }
 
-    function pickFile(callback) {
+    function pickFile(callback, title) {
+        var pickerTitle = title || "Select executable";
         root._runPicker(RuntimeManager.hasZenity
-            ? ["zenity", "--file-selection", "--title=Select executable"]
+            ? ["zenity", "--file-selection", "--title=" + pickerTitle]
             : RuntimeManager.hasKdialog
                 ? ["kdialog", "--getopenfilename"]
                 : [], callback);
