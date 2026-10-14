@@ -25,6 +25,7 @@ jobs:
         run: |
           node tests/test_blades.js
           node tests/test_dock.js
+          node tests/test_styles_ui.js
           node tests/test_desktopentry.js
           node tests/test_cameradevices.js
           node tests/test_recorderprocess.js
