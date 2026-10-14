@@ -13,6 +13,8 @@ const dockSingletonFile = path.join(__dirname, "..", "configs", "quickshell", "p
 const dockSingletonSrc = fs.readFileSync(dockSingletonFile, "utf8");
 const dockItemFile = path.join(__dirname, "..", "configs", "quickshell", "pill", "DockItem.qml");
 const dockItemSrc = fs.readFileSync(dockItemFile, "utf8");
+const dockButtonFile = path.join(__dirname, "..", "configs", "quickshell", "pill", "DockButton.qml");
+const dockButtonSrc = fs.readFileSync(dockButtonFile, "utf8");
 const dockBodyFile = path.join(__dirname, "..", "configs", "quickshell", "pill", "DockBody.qml");
 const dockBodySrc = fs.readFileSync(dockBodyFile, "utf8");
 const ctx = {};
@@ -176,6 +178,38 @@ check("hover lens hugs the app glyph while beads orbit independently", () => {
     assert.ok(!dockBodySrc.includes("var pipRoom = hasPips ? 8 * root.s : 0;"));
     assert.ok(dockItemSrc.includes("root.windowActivated(pipHit.index)"));
 });
+check("window beads stay visually outside the app focus outline", () => {
+    assert.ok(dockItemSrc.includes("readonly property real semiMajorAxis: 27.5 * root.s"));
+    assert.ok(dockItemSrc.includes("x: -12 * root.s"));
+    assert.ok(dockItemSrc.includes("width: root.width + 24 * root.s"));
+    assert.ok(dockItemSrc.includes("width: pipHit.windowActive ? 4 * root.s : 3 * root.s"));
+    assert.ok(dockItemSrc.includes("width: parent.width * 1.65"));
+    assert.ok(dockItemSrc.includes("root.width + 4 * root.s : -4 * root.s"));
+    assert.ok(dockItemSrc.includes("root.height / 2 + orbitalPosition.y - height / 2 + 12 * root.s"));
+
+    const focusRadius = (44 * 0.82 + 8) / 2;
+    const minimumOrbitRadius = 27.5 * (1 - 0.05);
+    const activeHaloRadius = 4 * 1.65 / 2;
+    const staticRailCenterRadius = 26;
+    assert.ok(minimumOrbitRadius - activeHaloRadius > focusRadius,
+        "active bead halo must clear the rounded focus frame during orbit");
+    assert.ok(staticRailCenterRadius - activeHaloRadius > focusRadius,
+        "active bead halo must clear the focus frame on the resting rail");
+    assert.ok(dockItemSrc.includes("width: 10 * root.s"),
+        "keep the larger invisible hit targets for easy clicking");
+});
+
+check("status controls use equal-height cells and reserve space for battery text", () => {
+    assert.ok(dockButtonSrc.includes("property real tileHeight: 44 * s"));
+    assert.ok(dockButtonSrc.includes("height: tileHeight"));
+    assert.ok(dockButtonSrc.includes("property real faceVerticalOffset: 0"));
+    assert.ok(dockButtonSrc.includes("anchors.verticalCenterOffset: root.faceVerticalOffset * root.s"));
+    assert.ok(dockButtonSrc.includes("anchors.bottomMargin: 1 * root.s"));
+    assert.ok(dockBodySrc.includes("faceVerticalOffset: -4"));
+    assert.ok(dockBodySrc.includes("var inflate = (isAppIcon ? 4 : 0) * root.s;"));
+    assert.ok(dockBodySrc.includes("target.height / 2 + faceOffsetY"));
+});
+
 check("glass lens keeps one outline and no refraction streaks", () => {
     assert.ok(dockItemSrc.includes("Tiny glass bead: tinted core, darkened lower edge, bright rim"));
     assert.ok(dockItemSrc.includes("Qt.lighter(Theme.onGlow, 1.65)"));
@@ -186,6 +220,14 @@ check("glass lens keeps one outline and no refraction streaks", () => {
     assert.ok(match[1].includes("border.width: 1"));
     assert.ok(!match[1].includes("Refraction-inspired streaks"));
     assert.ok(!match[1].includes("anchors.top: parent.top"));
+});
+
+check("hover lens remains visible through its contraction before fading", () => {
+    assert.ok(dockBodySrc.includes("property bool lensContracting: false"));
+    assert.ok(dockBodySrc.includes("root.lensContracting = true;"));
+    assert.ok(dockBodySrc.includes("id: lensContractionDelay"));
+    assert.ok(dockBodySrc.includes("interval: Motion.glide"));
+    assert.ok(dockBodySrc.includes("opacity: root.lensTarget || root.lensContracting ? 1 : 0"));
 });
 
 check("hover lens contracts into a small centered shape when pointer leaves", () => {
