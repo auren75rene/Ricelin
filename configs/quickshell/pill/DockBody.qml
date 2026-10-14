@@ -74,14 +74,14 @@ Item {
         // Give that edge of the shared lens enough room so its outline frames
         // both icon and indicators instead of drawing through the beads.
         var hasPips = !!(target.item && target.item.running > 0);
+        // Symmetric room keeps the lens centred around the icon and leaves
+        // space for beads as they sweep around either side.
         var pipRoom = hasPips ? 8 * root.s : 0;
-        var growLeft = hasPips && !Dock.onRight ? pipRoom : 0;
-        var growRight = hasPips && Dock.onRight ? pipRoom : 0;
 
         root.lensTarget = target;
-        root.lensX = p.x - inflate - growLeft;
+        root.lensX = p.x - inflate - pipRoom;
         root.lensY = p.y - inflate;
-        root.lensW = target.width + 2 * inflate + growLeft + growRight;
+        root.lensW = target.width + 2 * inflate + 2 * pipRoom;
         root.lensH = target.height + 2 * inflate;
         root.hintTitle = title;
         root.hintDesc = desc;
@@ -119,9 +119,14 @@ Item {
                 width: root.lensW
                 height: root.lensH
                 radius: 16 * root.s
-                color: Qt.alpha(Theme.bright, 0.12)
+                color: "transparent"
+                gradient: Gradient {
+                    GradientStop { position: 0; color: Qt.alpha(Theme.bright, 0.15) }
+                    GradientStop { position: 0.36; color: Qt.alpha(Theme.bright, 0.055) }
+                    GradientStop { position: 1; color: Qt.alpha(Theme.cardBot, 0.12) }
+                }
                 border.width: 1
-                border.color: Qt.alpha(Theme.bright, 0.22)
+                border.color: Qt.alpha(Theme.bright, 0.24)
                 opacity: root.lensTarget ? 1 : 0
                 visible: opacity > 0.01
                 Behavior on opacity { NumberAnimation { duration: Motion.fast } }
@@ -129,6 +134,40 @@ Item {
                 Behavior on y { enabled: lens.opacity > 0.05; NumberAnimation { duration: Motion.glide; easing.type: Easing.OutCubic } }
                 Behavior on width { enabled: lens.opacity > 0.05; NumberAnimation { duration: Motion.glide; easing.type: Easing.OutCubic } }
                 Behavior on height { enabled: lens.opacity > 0.05; NumberAnimation { duration: Motion.glide; easing.type: Easing.OutCubic } }
+
+                // Refraction-inspired streaks: layered translucency and displaced
+                // highlights mimic light crossing a curved glass surface without
+                // drawing another border around the app icon.
+                Rectangle {
+                    x: parent.width * 0.12
+                    y: parent.height * 0.12
+                    width: parent.width * 0.42
+                    height: Math.max(root.s, parent.height * 0.13)
+                    radius: height / 2
+                    color: "transparent"
+                    gradient: Gradient {
+                        orientation: Gradient.Horizontal
+                        GradientStop { position: 0; color: "transparent" }
+                        GradientStop { position: 0.42; color: Qt.alpha(Theme.bright, 0.065) }
+                        GradientStop { position: 1; color: "transparent" }
+                    }
+                }
+
+                Rectangle {
+                    height: Math.max(1, root.s)
+                    anchors.top: parent.top
+                    anchors.topMargin: 1 * root.s
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.leftMargin: parent.width * 0.18
+                    anchors.rightMargin: parent.width * 0.18
+                    gradient: Gradient {
+                        orientation: Gradient.Horizontal
+                        GradientStop { position: 0; color: "transparent" }
+                        GradientStop { position: 0.5; color: Qt.alpha(Theme.bright, 0.68) }
+                        GradientStop { position: 1; color: "transparent" }
+                    }
+                }
             }
 
             Column {
