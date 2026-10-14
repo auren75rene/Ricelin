@@ -124,14 +124,14 @@ Item {
             target: root
             property: "orbitBurstProgress"
             from: 0
-            to: 0.78
+            to: 0.41
             duration: 250
             easing.type: Easing.InCubic
         }
         NumberAnimation {
             target: root
             property: "orbitBurstProgress"
-            from: 0.78
+            from: 0.41
             to: 1
             duration: 360
             easing.type: Easing.OutCubic
