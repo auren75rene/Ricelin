@@ -178,22 +178,29 @@ check("hover lens hugs the app glyph while beads orbit independently", () => {
     assert.ok(!dockBodySrc.includes("var pipRoom = hasPips ? 8 * root.s : 0;"));
     assert.ok(dockItemSrc.includes("root.windowActivated(pipHit.index)"));
 });
-check("window beads stay visually outside the app focus outline", () => {
-    assert.ok(dockItemSrc.includes("readonly property real semiMajorAxis: 27.5 * root.s"));
+check("window beads stay outside the rounded focus frame and inside the dock", () => {
+    assert.ok(dockItemSrc.includes("readonly property real semiMajorAxis: 28.3 * root.s"));
+    assert.ok(dockItemSrc.includes("readonly property real eccentricity: 0.01"));
     assert.ok(dockItemSrc.includes("x: -12 * root.s"));
     assert.ok(dockItemSrc.includes("width: root.width + 24 * root.s"));
     assert.ok(dockItemSrc.includes("width: pipHit.windowActive ? 4 * root.s : 3 * root.s"));
-    assert.ok(dockItemSrc.includes("width: parent.width * 1.65"));
+    assert.ok(dockItemSrc.includes("width: parent.width * 1.2"));
     assert.ok(dockItemSrc.includes("root.width + 4 * root.s : -4 * root.s"));
     assert.ok(dockItemSrc.includes("root.height / 2 + orbitalPosition.y - height / 2 + 12 * root.s"));
 
-    const focusRadius = (44 * 0.82 + 8) / 2;
-    const minimumOrbitRadius = 27.5 * (1 - 0.05);
-    const activeHaloRadius = 4 * 1.65 / 2;
+    const lensHalfSize = (44 * 0.82 + 8) / 2;
+    const lensCornerRadius = 16;
+    const lensCornerReach = Math.SQRT2 * (lensHalfSize - lensCornerRadius + lensCornerRadius / Math.SQRT2);
+    const minOrbitRadius = 28.3 * (1 - 0.01);
+    const maxOrbitRadius = 28.3 * (1 + 0.01);
+    const activeHaloRadius = 4 * 1.2 / 2;
+    const capsuleHalfWidth = 44 / 2 + 9;
     const staticRailCenterRadius = 26;
-    assert.ok(minimumOrbitRadius - activeHaloRadius > focusRadius,
-        "active bead halo must clear the rounded focus frame during orbit");
-    assert.ok(staticRailCenterRadius - activeHaloRadius > focusRadius,
+    assert.ok(minOrbitRadius - activeHaloRadius > lensCornerReach,
+        "active bead halo must clear the rounded corners throughout its orbit");
+    assert.ok(maxOrbitRadius + activeHaloRadius < capsuleHalfWidth,
+        "active bead halo must remain inside the glass capsule");
+    assert.ok(staticRailCenterRadius - activeHaloRadius > lensHalfSize,
         "active bead halo must clear the focus frame on the resting rail");
     assert.ok(dockItemSrc.includes("width: 10 * root.s"),
         "keep the larger invisible hit targets for easy clicking");
