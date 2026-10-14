@@ -11,6 +11,8 @@
 #   ricelin-style toggle <id>      start it if stopped, stop it if running
 #   ricelin-style off              stop every style and forget the choice
 #   ricelin-style apply            at login: start the style that was last chosen
+#   ricelin-style add <id> <name> <config|path> <target> [note]
+#                                   register an external style for the pill
 #
 # A style is one Quickshell config that runs on top of Ricelin. Two places supply
 # them:
@@ -45,6 +47,7 @@ usage: ricelin-style list
        ricelin-style toggle <id>
        ricelin-style off
        ricelin-style apply
+       ricelin-style add <id> <name> <config|path> <target> [note]
 EOF
     exit 2
 }
@@ -121,7 +124,7 @@ all_ids() {
             [ -f "${d}shell.qml" ] || continue
             base="${d%/}"
             base="${base##*/}"
-            case "$base" in pill | launcher | lock) continue ;; esac
+            case "$base" in pill | launcher | lock | pill-recovery-*) continue ;; esac
             id="$(slug "$base")"
             valid_id "$id" || continue
             case "$seen" in *" $id "*) continue ;; esac
@@ -168,7 +171,7 @@ resolve() {
         [ -f "${d}shell.qml" ] || continue
         base="${d%/}"
         base="${base##*/}"
-        case "$base" in pill | launcher | lock) continue ;; esac
+        case "$base" in pill | launcher | lock | pill-recovery-*) continue ;; esac
         if [ "$(slug "$base")" = "$1" ]; then
             kind=config
             target="${d%/}"
@@ -211,6 +214,88 @@ cmd_list() {
         if is_running; then st=running; else st=stopped; fi
         printf '%s\t%s\t%s\t%s\n' "$id" "$label" "$st" "$blurb"
     done
+}
+
+# Register an external Quickshell folder or entry file, without executing its
+# contents. Values are stored as plain text in a .conf file and never sourced.
+cmd_add() {
+    [ "$#" -ge 4 ] && [ "$#" -le 5 ] || usage
+    id="$1"
+    label="$2"
+    kind="$3"
+    raw_target="$4"
+    blurb="${5:-}"
+
+    valid_id "$id" || { reject_add "Invalid style ID" "Use lowercase letters, digits, dot, underscore or hyphen."; return 1; }
+    case "$id" in ricelin | pill | launcher | lock | pill-recovery-*) reject_add "Reserved style ID" "'$id' cannot be registered as an extra style."; return 1 ;; esac
+    [ -n "$label" ] || { reject_add "Missing style name" "Enter a display name."; return 1; }
+    case "$kind" in config | path) ;; *) reject_add "Invalid style type" "Choose a config folder or an entry file."; return 1 ;; esac
+
+    tab="$(printf '\t')"
+    nl='
+'
+    cr="$(printf '\r')"
+    for value in "$id" "$label" "$raw_target" "$blurb"; do
+        case "$value" in
+            *"$tab"* | *"$nl"* | *"$cr"*)
+                reject_add "Invalid style details" "Names, IDs, paths and notes must fit on one line."
+                return 1
+                ;;
+        esac
+    done
+
+    target="$(expand "$raw_target")"
+    case "$target" in
+        /*) ;;
+        *) reject_add "Style path must be absolute" "Choose a path with Browse, or use an absolute path or ~/…."; return 1 ;;
+    esac
+    if [ "$kind" = config ]; then
+        [ -d "$target" ] && [ -f "$target/shell.qml" ] || {
+            reject_add "Not a Quickshell config folder" "$target must be a directory containing shell.qml."
+            return 1
+        }
+    else
+        [ -f "$target" ] || {
+            reject_add "Style entry file not found" "$target does not exist or is not a file."
+            return 1
+        }
+    fi
+
+    # A .conf already wins over discovered folders, so don't silently replace
+    # one; likewise don't shadow an automatically discovered style.
+    if resolve "$id"; then
+        reject_add "Style already exists" "'$id' is already registered or auto-discovered."
+        return 1
+    fi
+
+    mkdir -p "$conf_dir" || { reject_add "Cannot register style" "Could not create $conf_dir."; return 1; }
+    file="$conf_dir/$id.conf"
+    tmp="$conf_dir/.$id.conf.$"
+    [ ! -e "$file" ] && [ ! -e "$tmp" ] || {
+        reject_add "Style already exists" "A registration file for '$id' already exists."
+        return 1
+    }
+
+    ( umask 077; printf 'name=%s\n%s=%s\nnote=%s\n' "$label" "$kind" "$target" "$blurb" >"$tmp" ) || {
+        rm -f "$tmp"
+        reject_add "Cannot register style" "Could not write the registration file."
+        return 1
+    }
+    mv "$tmp" "$file" || {
+        rm -f "$tmp"
+        reject_add "Cannot register style" "Could not finalize the registration file."
+        return 1
+    }
+
+    note "registered style '$id' ($label)"
+    have notify-send && notify-send -u normal -a Ricelin "Style added" "$label is now available in Styles & Persona."
+    return 0
+}
+
+reject_add() {
+    note "$1: $2"
+    have notify-send && notify-send -u normal -a Ricelin "$1" "$2"
+    return 1
 }
 
 cmd_current() {
@@ -277,5 +362,6 @@ case "$cmd" in
     toggle)  cmd_toggle "$@" ;;
     off)     cmd_off ;;
     apply)   cmd_apply ;;
+    add)     cmd_add "$@" ;;
     *)       usage ;;
 esac
