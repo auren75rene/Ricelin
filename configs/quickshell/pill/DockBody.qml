@@ -61,9 +61,19 @@ Item {
     function hover(target, on, title, desc) {
         if (!on) {
             if (root.lensTarget === target) {
-                root.lensTarget = null;
                 root.hintShown = false;
                 hintDelay.stop();
+
+                // Contract the lens around its own centre before it fades. When
+                // another item is entered, the same lens expands from that point.
+                var centerX = root.lensX + root.lensW / 2;
+                var centerY = root.lensY + root.lensH / 2;
+                var collapsedSize = 8 * root.s;
+                root.lensX = centerX - collapsedSize / 2;
+                root.lensY = centerY - collapsedSize / 2;
+                root.lensW = collapsedSize;
+                root.lensH = collapsedSize;
+                root.lensTarget = null;
             }
             return;
         }
@@ -117,7 +127,7 @@ Item {
                 y: root.lensY
                 width: root.lensW
                 height: root.lensH
-                radius: 16 * root.s
+                radius: Math.min(16 * root.s, width / 2, height / 2)
                 color: "transparent"
                 gradient: Gradient {
                     GradientStop { position: 0; color: Qt.alpha(Theme.bright, 0.15) }
@@ -134,39 +144,6 @@ Item {
                 Behavior on width { enabled: lens.opacity > 0.05; NumberAnimation { duration: Motion.glide; easing.type: Easing.OutCubic } }
                 Behavior on height { enabled: lens.opacity > 0.05; NumberAnimation { duration: Motion.glide; easing.type: Easing.OutCubic } }
 
-                // Refraction-inspired streaks: layered translucency and displaced
-                // highlights mimic light crossing a curved glass surface without
-                // drawing another border around the app icon.
-                Rectangle {
-                    x: parent.width * 0.12
-                    y: parent.height * 0.12
-                    width: parent.width * 0.42
-                    height: Math.max(root.s, parent.height * 0.13)
-                    radius: height / 2
-                    color: "transparent"
-                    gradient: Gradient {
-                        orientation: Gradient.Horizontal
-                        GradientStop { position: 0; color: "transparent" }
-                        GradientStop { position: 0.42; color: Qt.alpha(Theme.bright, 0.065) }
-                        GradientStop { position: 1; color: "transparent" }
-                    }
-                }
-
-                Rectangle {
-                    height: Math.max(1, root.s)
-                    anchors.top: parent.top
-                    anchors.topMargin: 1 * root.s
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.leftMargin: parent.width * 0.18
-                    anchors.rightMargin: parent.width * 0.18
-                    gradient: Gradient {
-                        orientation: Gradient.Horizontal
-                        GradientStop { position: 0; color: "transparent" }
-                        GradientStop { position: 0.5; color: Qt.alpha(Theme.bright, 0.68) }
-                        GradientStop { position: 1; color: "transparent" }
-                    }
-                }
             }
 
             Column {
