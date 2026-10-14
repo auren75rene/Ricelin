@@ -111,13 +111,13 @@ Item {
         id: tb
         property string label: ""
         property bool primary: false
-        property bool enabled: true
+        property bool available: true
         signal clicked()
         implicitWidth: tbLabel.implicitWidth + 22 * root.s
         implicitHeight: 32 * root.s
         radius: 9 * root.s
-        color: tb.primary ? (tb.enabled ? Theme.vermDeep : Theme.threadBg) : (tbArea.containsMouse ? Theme.frameBg : "transparent")
-        opacity: tb.enabled ? 1 : 0.5
+        color: tb.primary ? (tb.available ? Theme.vermDeep : Theme.threadBg) : (tbArea.containsMouse ? Theme.frameBg : "transparent")
+        opacity: tb.available ? 1 : 0.5
         border.width: 1
         border.color: tb.primary ? "transparent" : Theme.frameBorder
         Behavior on color { ColorAnimation { duration: Motion.fast } }
@@ -133,7 +133,7 @@ Item {
         MouseArea {
             id: tbArea
             anchors.fill: parent
-            enabled: tb.enabled
+            enabled: tb.available
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
             onClicked: tb.clicked()
@@ -276,7 +276,7 @@ Item {
         Row {
             anchors.right: parent.right
             spacing: 8 * root.s
-            TextButton { label: "Cancel"; enabled: !root.saving; onClicked: root.cancelled() }
+            TextButton { label: "Cancel"; available: !root.saving; onClicked: root.cancelled() }
             TextButton {
                 label: root.saving ? "Adding…" : "Add style"
                 primary: true
