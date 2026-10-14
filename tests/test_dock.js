@@ -148,7 +148,9 @@ check("cursor hover triggers a finite acceleration/deceleration orbit", () => {
     assert.ok(dockItemSrc.includes("onHoveredChanged: {"));
     assert.ok(dockItemSrc.includes("root.hovered && root.item && root.item.running > 0"));
     assert.ok(dockItemSrc.includes("duration: 250"));
+    assert.ok(dockItemSrc.includes("to: 0.41"));
     assert.ok(dockItemSrc.includes("easing.type: Easing.InCubic"));
+    assert.ok(dockItemSrc.includes("from: 0.41"));
     assert.ok(dockItemSrc.includes("duration: 360"));
     assert.ok(dockItemSrc.includes("easing.type: Easing.OutCubic"));
     assert.ok(dockItemSrc.includes("property real orbitMix: root.hovered ? 1 : 0"));
