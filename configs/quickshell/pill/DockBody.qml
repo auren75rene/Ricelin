@@ -183,10 +183,9 @@ Item {
                 // so a focus change or a new window never rebuilds the whole list.
                 Column {
                     id: apps
-                    // Pull only the app row inward: the right-side orbital pips
-                    // need more clearance from the capsule border, while the
-                    // status controls keep their existing alignment.
-                    x: -3.5 * root.s
+                    // Stay on the same centreline as the status controls.
+                    // Pip clearance is provided by the capsule's symmetric
+                    // padding, never by shifting the app column.
                     width: parent.width
                     spacing: root.gap
 
