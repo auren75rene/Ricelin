@@ -160,14 +160,14 @@ check("windowAt rejects missing, fractional and out-of-range indexes", () => {
 
 console.log("dock hover styling");
 check("focused app backing has no nested border", () => {
-    const match = dockItemSrc.match(/\/\/ Focused app:[\\s\\S]*?Rectangle\\s*\\{([\\s\\S]*?)\\n    \\}/);
+    const match = dockItemSrc.match(/\/\/ Focused app:[\s\S]*?Rectangle\s*\{([\s\S]*?)\n    \}/);
     assert.ok(match, "focused app backing should exist");
-    assert.ok(!/border\\.(width|color)\\s*:/.test(match[1]), "focused app backing must not draw an outline");
+    assert.ok(!/border\.(width|color)\s*:/.test(match[1]), "focused app backing must not draw an outline");
 });
 check("shared hover lens keeps the single moving outline", () => {
-    const match = dockBodySrc.match(/\/\/ The lens:[\\s\\S]*?Rectangle\\s*\\{([\\s\\S]*?)\\n            \\}/);
+    const match = dockBodySrc.match(/\/\/ The lens:[\s\S]*?Rectangle\s*\{([\s\S]*?)\n            \}/);
     assert.ok(match, "shared hover lens should exist");
-    assert.ok(/border\\.width\\s*:\\s*1/.test(match[1]), "shared lens should retain its outline");
+    assert.ok(/border\.width\s*:\s*1/.test(match[1]), "shared lens should retain its outline");
     assert.ok(/Behavior on x/.test(match[1]), "shared outline should move with the cursor");
 });
 
