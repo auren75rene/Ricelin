@@ -168,7 +168,7 @@ PillSurface {
             topPadding: 8 * root.s
             visible: Styles.list.length === 0
             wrapMode: Text.WordWrap
-            text: "No other styles yet. Put another setup's Quickshell folder in ~/.config/quickshell and it shows up here."
+            text: "No extra styles discovered. Put a Quickshell config with shell.qml in ~/.config/quickshell/<name>, or add ~/.config/ricelin/styles/<id>.conf for a config stored elsewhere. Persona also follows RICELIN_PERSONA_DIR."
             color: Theme.faint
             font.family: Theme.font
             font.pixelSize: 10.5 * root.s
