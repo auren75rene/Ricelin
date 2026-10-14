@@ -66,7 +66,7 @@ Item {
         // Keep the persistent active-state tint as compact as the shared lens.
         // This is fill only; DockBody remains the sole owner of the outline.
         anchors.centerIn: iconBox
-        width: iconBox.width + 8 * root.s
+        width: iconBox.width + 14 * root.s
         height: width
         radius: 15 * root.s
         color: Qt.alpha(Theme.bright, 0.065)
