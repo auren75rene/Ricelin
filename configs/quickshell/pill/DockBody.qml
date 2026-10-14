@@ -151,7 +151,7 @@ Item {
                 y: root.lensY
                 width: root.lensW
                 height: root.lensH
-                radius: Math.min(16 * root.s, width / 2, height / 2)
+                radius: Math.min(root.lensTarget && root.lensTarget.item ? 19.5 * root.s : 16 * root.s, width / 2, height / 2)
                 color: "transparent"
                 gradient: Gradient {
                     GradientStop { position: 0; color: Qt.alpha(Theme.bright, 0.15) }
