@@ -35,7 +35,7 @@ applications="$home/.local/share/applications"
 argv_log="$work/argv.log"
 log="$work/quickshell.log"
 
-mkdir -p -- "$home" "$config/hypr/scripts" "$runtime" "$qml_dir" "$workdir" "$desktop_bin" "$applications"
+mkdir -p -- "$home" "$home/.config/hypr/scripts" "$config/hypr/scripts" "$runtime" "$qml_dir" "$workdir" "$desktop_bin" "$applications"
 chmod 700 "$runtime"
 : > "$prefix_executable"
 
@@ -59,6 +59,8 @@ NoDisplay=false
 EOF
 
 install -m 755 "$repo/configs/hypr/scripts/ricelin-prefix" "$config/hypr/scripts/ricelin-prefix"
+install -m 755 "$repo/configs/hypr/scripts/ricelin-style" "$home/.config/hypr/scripts/ricelin-style"
+install -m 755 "$repo/configs/hypr/scripts/qs-toggle.sh" "$home/.config/hypr/scripts/qs-toggle.sh"
 install -m 644 "$here/qml_runtime_smoke.qml" "$qml_dir/qml_runtime_smoke.qml"
 # Mirror the production layout so relative imports from Singletons resolve.
 ln -s "$repo/configs/quickshell/pill/Singletons" "$qml_dir/Singletons"
