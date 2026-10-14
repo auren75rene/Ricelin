@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import "Singletons"
+import "lib/dock.js" as DockLib
 
 /**
  * One app in the dock: its icon, a pip for every open window and a brighter pip
@@ -124,20 +125,6 @@ Item {
         running: !!(root.item && root.item.active)
     }
 
-    function solveEccentricAnomaly(meanAnomaly, eccentricity) {
-        var tau = 2 * Math.PI;
-        var m = meanAnomaly % tau;
-        if (m < 0)
-            m += tau;
-
-        var e = Math.max(0, Math.min(0.8, eccentricity));
-        var estimate = m;
-        for (var i = 0; i < 5; i++)
-            estimate -= (estimate - e * Math.sin(estimate) - m)
-                / (1 - e * Math.cos(estimate));
-        return estimate;
-    }
-
     // A dot per open window (up to three). On focus they orbit the icon as a
     // small planetary system; on blur they ease back to their static pip rail.
     Item {
@@ -169,12 +156,11 @@ Item {
                     windowRecord && windowRecord.address === Dock.activeAddress
                 readonly property real eccentricity: 0.10
                 readonly property real semiMajorAxis: 19.5 * root.s
-                readonly property real semiMinorAxis:
-                    semiMajorAxis * Math.sqrt(1 - eccentricity * eccentricity)
                 readonly property real phase:
                     2 * Math.PI * index / Math.max(1, dotCount)
-                readonly property real eccentricAnomaly:
-                    root.solveEccentricAnomaly(root.orbitMeanAnomaly + phase, eccentricity)
+                readonly property var orbitalPosition:
+                    DockLib.orbitPosition(root.orbitMeanAnomaly + phase,
+                                          semiMajorAxis, eccentricity)
 
                 readonly property real staticX:
                     (Dock.onRight ? root.width + 1.5 * root.s : -1.5 * root.s)
@@ -185,13 +171,9 @@ Item {
                     - height / 2 + 8 * root.s
 
                 readonly property real orbitX:
-                    root.width / 2
-                    + semiMajorAxis * (Math.cos(eccentricAnomaly) - eccentricity)
-                    - width / 2 + 8 * root.s
+                    root.width / 2 + orbitalPosition.x - width / 2 + 8 * root.s
                 readonly property real orbitY:
-                    root.height / 2
-                    + semiMinorAxis * Math.sin(eccentricAnomaly)
-                    - height / 2 + 8 * root.s
+                    root.height / 2 + orbitalPosition.y - height / 2 + 8 * root.s
 
                 property real orbitMix: root.item && root.item.active ? 1 : 0
                 Behavior on orbitMix {
