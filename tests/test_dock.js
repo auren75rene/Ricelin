@@ -184,6 +184,26 @@ check("dock capsule adds vertical orbit clearance at both ends", () => {
     assert.ok(dockBodySrc.includes("radius: 30 * root.s"));
     assert.ok(dockBodySrc.includes("y: root.pad + root.orbitRoom"));
 });
+
+check("app focus has a minimum visual size and clears the Writer divider", () => {
+    assert.ok(dockBodySrc.includes("var focusSize = isAppIcon ? target.tile * 0.82 : 0;"));
+    assert.ok(dockBodySrc.includes("readonly property real dividerClearance: 5 * s"));
+    assert.ok(dockBodySrc.includes("spacing: root.gap + root.dividerClearance"));
+    assert.ok(dockBodySrc.includes("tail.height - gap - root.dividerClearance"));
+    assert.ok(dockBodySrc.includes("x: -3.5 * root.s"));
+
+    const tile = 44;
+    const pad = 9;
+    const appShift = 3.5;
+    const focusHeight = tile * 0.82 + 8;
+    const focusHalf = focusHeight / 2;
+    const appLeftClearance = pad + tile / 2 - appShift - focusHalf;
+    const dividerGap = 4 + 5 - (focusHeight - tile) / 2;
+    assert.ok(appLeftClearance > 5,
+        "the larger focus layer must remain clear of the capsule's inner left border");
+    assert.ok(dividerGap > 8.8,
+        "Writer's focus layer must have at least 8.8 logical pixels before the divider");
+});
 check("window beads clear their own lens, neighboring active tints, and the capsule", () => {
     assert.ok(dockItemSrc.includes("readonly property real semiMajorAxis: 26 * root.s"));
     assert.ok(dockItemSrc.includes("readonly property real eccentricity: 0.01"));
