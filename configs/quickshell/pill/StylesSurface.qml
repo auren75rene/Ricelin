@@ -116,7 +116,7 @@ PillSurface {
                 }
                 Text {
                     anchors.verticalCenter: parent.verticalCenter
-                    text: "STYLES"
+                    text: "STYLES & PERSONA"
                     color: Theme.subtle
                     font.family: Theme.font
                     font.pixelSize: 10 * root.s
@@ -124,6 +124,18 @@ PillSurface {
                     font.capitalization: Font.AllUppercase
                     font.letterSpacing: 1.6 * root.s
                 }
+            }
+
+            // The pill routes header clicks through surfaceBack(); this arrow
+            // makes the return path to Settings visible instead of implicit.
+            GlyphIcon {
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                width: 16 * root.s
+                height: 16 * root.s
+                name: "chevron-left"
+                color: Theme.iconDim
+                stroke: 2.2
             }
         }
 
