@@ -164,11 +164,17 @@ check("window beads return smoothly when the cursor leaves", () => {
     assert.ok(dockItemSrc.includes("orbitBurst.stop();"));
     assert.ok(dockItemSrc.includes("Behavior on orbitMix"));
 });
-check("hover lens stays centred and leaves room for the orbiting beads", () => {
-    assert.ok(dockBodySrc.includes("var hasPips = !!(target.item && target.item.running > 0);"));
-    assert.ok(dockBodySrc.includes("var pipRoom = hasPips ? 8 * root.s : 0;"));
-    assert.ok(dockBodySrc.includes("root.lensX = p.x - inflate - pipRoom;"));
-    assert.ok(dockBodySrc.includes("target.width + 2 * inflate + 2 * pipRoom"));
+check("hover lens hugs the app glyph while beads orbit independently", () => {
+    assert.ok(dockBodySrc.includes("var isAppIcon = !!target.item;"));
+    assert.ok(dockBodySrc.includes("var focusSize = isAppIcon ? target.tile * 0.68 : 0;"));
+    assert.ok(dockBodySrc.includes("var focusOffsetX = isAppIcon ? (target.width - focusSize) / 2 : 0;"));
+    assert.ok(dockBodySrc.includes("var focusOffsetY = isAppIcon ? (target.height - focusSize) / 2 : 0;"));
+    assert.ok(dockBodySrc.includes("root.lensX = p.x + focusOffsetX - inflate;"));
+    assert.ok(dockBodySrc.includes("root.lensY = p.y + focusOffsetY - inflate;"));
+    assert.ok(dockBodySrc.includes("root.lensW = isAppIcon ? focusSize + 2 * inflate : target.width + 2 * inflate;"));
+    assert.ok(dockBodySrc.includes("root.lensH = isAppIcon ? focusSize + 2 * inflate : target.height + 2 * inflate;"));
+    assert.ok(!dockBodySrc.includes("var pipRoom = hasPips ? 8 * root.s : 0;"));
+    assert.ok(dockItemSrc.includes("root.windowActivated(pipHit.index)"));
 });
 check("beads and focus lens use glass-like highlights without another border", () => {
     assert.ok(dockItemSrc.includes("Tiny glass bead: tinted core, darkened lower edge, bright rim"));
@@ -221,6 +227,11 @@ check("focused app backing has no nested border", () => {
     const match = dockItemSrc.match(/\/\/ Focused app:[\s\S]*?Rectangle\s*\{([\s\S]*?)\n    \}/);
     assert.ok(match, "focused app backing should exist");
     assert.ok(!/border\.(width|color)\s*:/.test(match[1]), "focused app backing must not draw an outline");
+});
+check("persistent active tint stays compact around the icon", () => {
+    assert.ok(dockItemSrc.includes("anchors.centerIn: iconBox"));
+    assert.ok(dockItemSrc.includes("width: iconBox.width + 8 * root.s"));
+    assert.ok(dockItemSrc.includes("height: width"));
 });
 check("shared hover lens keeps the single moving outline", () => {
     const match = dockBodySrc.match(/\/\/ The lens:[\s\S]*?Rectangle\s*\{([\s\S]*?)\n            \}/);
