@@ -9,6 +9,8 @@ const assert = require("assert");
 
 const file = path.join(__dirname, "..", "configs", "quickshell", "pill", "lib", "dock.js");
 const src = fs.readFileSync(file, "utf8").replace(/^\.pragma.*$/m, "");
+const dockSingletonFile = path.join(__dirname, "..", "configs", "quickshell", "pill", "Singletons", "Dock.qml");
+const dockSingletonSrc = fs.readFileSync(dockSingletonFile, "utf8");
 const ctx = {};
 vm.createContext(ctx);
 vm.runInContext(src, ctx);
@@ -150,6 +152,19 @@ check("windowAt rejects missing, fractional and out-of-range indexes", () => {
     assert.strictEqual(D.windowAt(item, 1), null);
     assert.strictEqual(D.windowAt(item, 0.5), null);
     assert.strictEqual(D.windowAt(null, 0), null);
+});
+
+console.log("focus dispatcher");
+check("Lua-mode focus uses the Lua dispatcher expression", () => {
+    assert.ok(dockSingletonSrc.includes("if (Hyprland.usingLua)"));
+    assert.ok(dockSingletonSrc.includes('hl.dsp.focus({ window = "'));
+});
+check("Lua-mode minimized-window restore moves the selected window", () => {
+    assert.ok(dockSingletonSrc.includes('hl.dsp.window.move({ workspace = " + workspace + ", follow = false })'));
+});
+check("legacy Hyprland mode retains standard dispatcher syntax", () => {
+    assert.ok(dockSingletonSrc.includes('Hyprland.dispatch("focuswindow " + selector)'));
+    assert.ok(dockSingletonSrc.includes('Hyprland.dispatch("movetoworkspace "'));
 });
 
 console.log("pins");
