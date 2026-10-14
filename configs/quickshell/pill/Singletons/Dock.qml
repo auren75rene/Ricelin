@@ -148,13 +148,35 @@ Singleton {
         return Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : 1;
     }
 
-    /** Focus a known window, restoring it from the minimized workspace first. */
+    /**
+     * Focus a known window, restoring it from the minimized workspace first.
+     * Ricelin uses Hyprland's Lua configuration backend; in Lua mode, legacy
+     * dispatcher strings such as "focuswindow address:..." are parsed as Lua
+     * and fail. Keep both syntaxes supported for older non-Lua configurations.
+     */
     function focusWindow(w, screenName) {
-        if (!w)
+        if (!w || !w.address)
             return;
+
+        var address = root.hex(w.address);
+        var selector = "address:" + address;
+
+        if (Hyprland.usingLua) {
+            if (w.workspace === "special:minimized") {
+                var workspace = Number(root.restoreWorkspace(screenName));
+                // Focus the hidden window first so window.move acts on that
+                // window, then move it without switching workspaces, and focus
+                // it normally to reveal it on the intended workspace.
+                Hyprland.dispatch('hl.dsp.focus({ window = "' + selector + '" })');
+                Hyprland.dispatch("hl.dsp.window.move({ workspace = " + workspace + ", follow = false })");
+            }
+            Hyprland.dispatch('hl.dsp.focus({ window = "' + selector + '" })');
+            return;
+        }
+
         if (w.workspace === "special:minimized")
-            Hyprland.dispatch("movetoworkspace " + root.restoreWorkspace(screenName) + ",address:" + w.address);
-        Hyprland.dispatch("focuswindow address:" + w.address);
+            Hyprland.dispatch("movetoworkspace " + root.restoreWorkspace(screenName) + "," + selector);
+        Hyprland.dispatch("focuswindow " + selector);
     }
 
     /** A dock pip focuses that exact window instead of cycling to another one. */
