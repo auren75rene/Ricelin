@@ -270,7 +270,7 @@ cmd_add() {
 
     mkdir -p "$conf_dir" || { reject_add "Cannot register style" "Could not create $conf_dir."; return 1; }
     file="$conf_dir/$new_id.conf"
-    tmp="$conf_dir/.$id.conf.$"
+    tmp="$conf_dir/.$new_id.conf.$"
     [ ! -e "$file" ] && [ ! -e "$tmp" ] || {
         reject_add "Style already exists" "A registration file for '$new_id' already exists."
         return 1
