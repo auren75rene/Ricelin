@@ -146,6 +146,7 @@ Item {
                             s: root.s
                             tile: root.tile
                             onActivated: Dock.activate(app.item, root.screenName)
+                            onWindowActivated: (windowIndex) => Dock.activateWindow(app.item, windowIndex, root.screenName)
                             onLaunchNew: Dock.launch(app.item)
                             onPinToggled: Dock.togglePin(app.item)
                             onHoverChanged: (on) => root.hover(app, on, app.title, app.desc)
