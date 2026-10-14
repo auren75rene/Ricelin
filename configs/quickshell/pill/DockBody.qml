@@ -68,21 +68,20 @@ Item {
             return;
         }
         var p = target.mapToItem(body, 0, 0);
-        var inflate = 2 * root.s;
+        var isAppIcon = !!target.item;
+        var inflate = (isAppIcon ? 4 : 2) * root.s;
 
-        // Running app pips sit just beyond the icon on the dock's outer edge.
-        // Give that edge of the shared lens enough room so its outline frames
-        // both icon and indicators instead of drawing through the beads.
-        var hasPips = !!(target.item && target.item.running > 0);
-        // Symmetric room keeps the lens centred around the icon and leaves
-        // space for beads as they sweep around either side.
-        var pipRoom = hasPips ? 8 * root.s : 0;
+        // App focus hugs the glyph, not the whole clickable tile. The window
+        // beads orbit outside this compact frame and keep their own hit targets.
+        var focusSize = isAppIcon ? target.tile * 0.68 : 0;
+        var focusOffsetX = isAppIcon ? (target.width - focusSize) / 2 : 0;
+        var focusOffsetY = isAppIcon ? (target.height - focusSize) / 2 : 0;
 
         root.lensTarget = target;
-        root.lensX = p.x - inflate - pipRoom;
-        root.lensY = p.y - inflate;
-        root.lensW = target.width + 2 * inflate + 2 * pipRoom;
-        root.lensH = target.height + 2 * inflate;
+        root.lensX = p.x + focusOffsetX - inflate;
+        root.lensY = p.y + focusOffsetY - inflate;
+        root.lensW = isAppIcon ? focusSize + 2 * inflate : target.width + 2 * inflate;
+        root.lensH = isAppIcon ? focusSize + 2 * inflate : target.height + 2 * inflate;
         root.hintTitle = title;
         root.hintDesc = desc;
         root.hintY = target.mapToItem(content, 0, target.height / 2).y;
