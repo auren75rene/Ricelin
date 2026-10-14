@@ -160,10 +160,10 @@ Item {
         id: pips
         // Extend beyond the tile so pip hit-targets remain valid at the outer
         // edge, even when their orbital position sits just outside the icon.
-        x: -8 * root.s
-        y: -8 * root.s
-        width: root.width + 16 * root.s
-        height: root.height + 16 * root.s
+        x: -12 * root.s
+        y: -12 * root.s
+        width: root.width + 24 * root.s
+        height: root.height + 24 * root.s
         visible: root.item && root.item.running > 0
         z: 2
 
@@ -184,7 +184,7 @@ Item {
                 readonly property bool windowActive:
                     windowRecord && windowRecord.address === Dock.activeAddress
                 readonly property real eccentricity: 0.05
-                readonly property real semiMajorAxis: 18.5 * root.s
+                readonly property real semiMajorAxis: 27.5 * root.s
                 readonly property real phase:
                     2 * Math.PI * index / Math.max(1, dotCount)
                 readonly property var orbitalPosition:
@@ -193,15 +193,15 @@ Item {
                         semiMajorAxis, eccentricity)
 
                 readonly property real staticX:
-                    (Dock.onRight ? root.width + 1.5 * root.s : -1.5 * root.s)
-                    - width / 2 + 8 * root.s
+                    (Dock.onRight ? root.width + 4 * root.s : -4 * root.s)
+                    - width / 2 + 12 * root.s
                 readonly property real staticY:
                     root.height / 2
                     + (index - (dotCount - 1) / 2) * 10 * root.s
-                    - height / 2 + 8 * root.s
+                    - height / 2 + 12 * root.s
 
                 readonly property real orbitX:
-                    root.width / 2 + orbitalPosition.x - width / 2 + 8 * root.s
+                    root.width / 2 + orbitalPosition.x - width / 2 + 12 * root.s
                 readonly property real orbitY:
                     root.height / 2 + orbitalPosition.y - height / 2 + 8 * root.s
 
@@ -217,12 +217,12 @@ Item {
                 x: staticX + (orbitX - staticX) * orbitMix
                 y: staticY + (orbitY - staticY) * orbitMix
 
-                // Tiny glass bead: tinted core, darkened lower edge, bright rim,
+                // Compact glass bead: tinted core, darkened lower edge, bright rim,
                 // a specular catchlight and a restrained halo for focused windows.
                 Rectangle {
                     id: bead
                     anchors.centerIn: parent
-                    width: pipHit.windowActive ? 5 * root.s : 4 * root.s
+                    width: pipHit.windowActive ? 4 * root.s : 3 * root.s
                     height: width
                     radius: width / 2
                     gradient: Gradient {
@@ -260,7 +260,7 @@ Item {
 
                     Rectangle {
                         anchors.centerIn: parent
-                        width: parent.width * 2.5
+                        width: parent.width * 1.65
                         height: width
                         radius: width / 2
                         color: Qt.alpha(Theme.onGlow, 0.18)
