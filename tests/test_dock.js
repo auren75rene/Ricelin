@@ -123,6 +123,39 @@ check("build never changes the inputs", () => {
     assert.strictEqual(ws.length, 1);
 });
 
+console.log("Kepler orbital motion");
+check("eccentric anomaly satisfies Kepler's equation", () => {
+    const tau = 2 * Math.PI;
+    for (const eccentricity of [0, 0.1, 0.4]) {
+        for (const mean of [0, 0.25, 1.7, Math.PI, 5.8]) {
+            const E = D.solveEccentricAnomaly(mean, eccentricity);
+            const M = ((mean % tau) + tau) % tau;
+            assert.ok(Math.abs(E - eccentricity * Math.sin(E) - M) < 1e-10,
+                "Kepler residual too large for e=" + eccentricity + ", M=" + mean);
+        }
+    }
+});
+check("orbital position reaches periapsis and apoapsis", () => {
+    const peri = D.orbitPosition(0, 20, 0.1);
+    const apo = D.orbitPosition(Math.PI, 20, 0.1);
+    assert.ok(Math.abs(peri.x - 18) < 1e-10);
+    assert.ok(Math.abs(peri.y) < 1e-10);
+    assert.ok(Math.abs(apo.x + 22) < 1e-10);
+    assert.ok(Math.abs(apo.y) < 1e-10);
+});
+check("focused pips animate from uniform mean anomaly through the orbit helper", () => {
+    assert.ok(dockItemSrc.includes("NumberAnimation on orbitMeanAnomaly"));
+    assert.ok(dockItemSrc.includes("running: !!(root.item && root.item.active)"));
+    assert.ok(dockItemSrc.includes("Behavior on orbitMix"));
+    assert.ok(dockItemSrc.includes("DockLib.orbitPosition("));
+    assert.ok(dockItemSrc.includes("root.windowActivated(pipHit.index)"));
+});
+check("hover lens reserves outer-edge room for static window pips", () => {
+    assert.ok(dockBodySrc.includes("var hasPips = !!(target.item && target.item.running > 0);"));
+    assert.ok(dockBodySrc.includes("var growLeft = hasPips && !Dock.onRight ? pipRoom : 0;"));
+    assert.ok(dockBodySrc.includes("var growRight = hasPips && Dock.onRight ? pipRoom : 0;"));
+});
+
 console.log("nextWindow");
 check("none running means launch", () => assert.strictEqual(D.nextWindow({ windows: [] }, ""), null));
 check("no focused window picks the first visible one", () => {
