@@ -111,17 +111,38 @@ Item {
         }
     }
 
-    // One pip per window (three visible at most). Each row has a separate
-    // click target, mapping directly to that window; the marker itself remains
-    // tiny, while its hit area is large enough to use reliably.
-    Column {
+    // Mean anomaly advances uniformly while this app is focused. Each dot's
+    // position is derived by solving Kepler's equation for an elliptical orbit:
+    // it naturally travels faster near periapsis and slower near apoapsis.
+    property real orbitMeanAnomaly: 0
+
+    NumberAnimation on orbitMeanAnomaly {
+        from: 0
+        to: 2 * Math.PI
+        duration: 2400
+        loops: Animation.Infinite
+        running: !!(root.item && root.item.active)
+    }
+
+    function solveEccentricAnomaly(meanAnomaly, eccentricity) {
+        var tau = 2 * Math.PI;
+        var m = meanAnomaly % tau;
+        if (m < 0)
+            m += tau;
+
+        var e = Math.max(0, Math.min(0.8, eccentricity));
+        var estimate = m;
+        for (var i = 0; i < 5; i++)
+            estimate -= (estimate - e * Math.sin(estimate) - m)
+                / (1 - e * Math.cos(estimate));
+        return estimate;
+    }
+
+    // A dot per open window (up to three). On focus they orbit the icon as a
+    // small planetary system; on blur they ease back to their static pip rail.
+    Item {
         id: pips
-        width: 12 * root.s
-        x: Dock.onRight
-            ? root.width + 1.5 * root.s - width / 2
-            : -1.5 * root.s - width / 2
-        anchors.verticalCenter: parent.verticalCenter
-        spacing: 1 * root.s
+        anchors.fill: parent
         visible: root.item && root.item.running > 0
         z: 2
 
@@ -131,26 +152,73 @@ Item {
             delegate: Item {
                 id: pipHit
                 required property int index
-                width: pips.width
+                width: 10 * root.s
                 height: 10 * root.s
 
+                readonly property int dotCount:
+                    root.item ? Math.min(3, root.item.running) : 1
                 readonly property var windowRecord:
                     root.item && root.item.windows && index < root.item.windows.length
                         ? root.item.windows[index] : null
+                readonly property bool windowActive:
+                    windowRecord && windowRecord.address === Dock.activeAddress
+                readonly property real eccentricity: 0.10
+                readonly property real semiMajorAxis: 19.5 * root.s
+                readonly property real semiMinorAxis:
+                    semiMajorAxis * Math.sqrt(1 - eccentricity * eccentricity)
+                readonly property real phase:
+                    2 * Math.PI * index / Math.max(1, dotCount)
+                readonly property real eccentricAnomaly:
+                    root.solveEccentricAnomaly(root.orbitMeanAnomaly + phase, eccentricity)
+
+                readonly property real staticX:
+                    (Dock.onRight ? root.width + 1.5 * root.s : -1.5 * root.s)
+                    - width / 2
+                readonly property real staticY:
+                    root.height / 2
+                    + (index - (dotCount - 1) / 2) * 10 * root.s
+                    - height / 2
+
+                readonly property real orbitX:
+                    root.width / 2
+                    + semiMajorAxis * (Math.cos(eccentricAnomaly) - eccentricity)
+                    - width / 2
+                readonly property real orbitY:
+                    root.height / 2
+                    + semiMinorAxis * Math.sin(eccentricAnomaly)
+                    - height / 2
+
+                property real orbitMix: root.item && root.item.active ? 1 : 0
+                Behavior on orbitMix {
+                    NumberAnimation {
+                        duration: Motion.morph
+                        easing.type: Motion.easeMorph
+                        easing.bezierCurve: Motion.morphCurve
+                    }
+                }
+
+                x: staticX + (orbitX - staticX) * orbitMix
+                y: staticY + (orbitY - staticY) * orbitMix
 
                 Rectangle {
                     anchors.centerIn: parent
-                    width: 4 * root.s
-                    height: pipHit.windowRecord
-                        && pipHit.windowRecord.address === Dock.activeAddress
-                        ? 9 * root.s : 4 * root.s
+                    width: pipHit.windowActive ? 5 * root.s : 4 * root.s
+                    height: width
                     radius: width / 2
-                    color: pipHit.windowRecord
-                        && pipHit.windowRecord.address === Dock.activeAddress
+                    color: pipHit.windowActive
                         ? Theme.onGlow : Qt.alpha(Theme.cream, 0.7)
                     opacity: pipHit.windowRecord
                         && pipHit.windowRecord.workspace === "special:minimized" ? 0.45 : 1
-                    Behavior on height { NumberAnimation { duration: Motion.fast } }
+
+                    Rectangle {
+                        anchors.centerIn: parent
+                        width: parent.width * 2.4
+                        height: width
+                        radius: width / 2
+                        color: Qt.alpha(Theme.onGlow, 0.20)
+                        visible: pipHit.windowActive
+                        z: -1
+                    }
                 }
 
                 MouseArea {
