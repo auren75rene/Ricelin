@@ -244,7 +244,7 @@ Item {
                             visible: Battery.present
                             s: root.s
                             tile: root.tile
-                            tileHeight: 44 * root.s
+                            faceVerticalOffset: -4
                             glyph: "battery"
                             caption: Battery.pct + "%"
                             tint: Battery.low ? Theme.vermLit : (Battery.charging ? Theme.flameGlow : Theme.iconDim)
