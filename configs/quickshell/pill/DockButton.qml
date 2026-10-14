@@ -23,6 +23,9 @@ Item {
     property real s: 1
     property real tile: 44 * s
     property real tileHeight: 44 * s
+    // Glyph footprint is independent of the click cell, so the six status icons
+    // can be made slightly larger without changing spacing or alignment.
+    property real faceSize: 22 * s
     // Optional optical offset for controls with a second line of text.
     property real faceVerticalOffset: 0
     /** The Wi-Fi arcs have their own drawing; `level` is 0..1, `on` the radio state. */
@@ -43,7 +46,7 @@ Item {
         id: face
         anchors.centerIn: parent
         anchors.verticalCenterOffset: root.faceVerticalOffset * root.s
-        width: 22 * root.s
+        width: root.faceSize
         height: width
         scale: area.pressed ? 0.88 : (area.containsMouse ? 1.14 : 1)
         Behavior on scale { SpringAnimation { spring: 3.5; damping: 0.3 } }
