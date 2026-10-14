@@ -69,6 +69,40 @@ function isMinimized(w) {
 }
 
 /**
+ * Solve Kepler's equation M = E - e sin(E) for eccentric anomaly E.
+ *
+ * The fan advances mean anomaly uniformly in time, then uses this solution to
+ * place each pip on an elliptical orbit. Because eccentric anomaly is nonlinear
+ * in mean anomaly, a pip speeds up near periapsis and slows near apoapsis instead
+ * of travelling at a robotic constant angular velocity.
+ */
+function solveEccentricAnomaly(meanAnomaly, eccentricity) {
+    var tau = 2 * Math.PI;
+    var m = Number(meanAnomaly) % tau;
+    if (m < 0)
+        m += tau;
+
+    var e = Math.max(0, Math.min(0.8, Number(eccentricity) || 0));
+    var estimate = m;
+    for (var i = 0; i < 6; i++)
+        estimate -= (estimate - e * Math.sin(estimate) - m)
+            / (1 - e * Math.cos(estimate));
+    return estimate;
+}
+
+/** Position in an elliptical orbit with the icon at one focus, centred at (0,0). */
+function orbitPosition(meanAnomaly, semiMajorAxis, eccentricity) {
+    var e = Math.max(0, Math.min(0.8, Number(eccentricity) || 0));
+    var a = Math.max(0, Number(semiMajorAxis) || 0);
+    var E = solveEccentricAnomaly(meanAnomaly, e);
+    return {
+        x: a * (Math.cos(E) - e),
+        y: a * Math.sqrt(1 - e * e) * Math.sin(E),
+        eccentricAnomaly: E
+    };
+}
+
+/**
  * Dock order: pinned apps in pinned order (hidden while their entry is not
  * installed and they are not running), then the other running apps in the order
  * their first window appears.
