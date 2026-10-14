@@ -21,6 +21,8 @@ jobs:
         run: sh tests/test_qs_toggle.sh
       - name: ricelin-style self-check
         run: sh tests/test_ricelin_style.sh
+      - name: Styles UI deploy self-check
+        run: sh tests/test_deploy_style_ui.sh
       - name: Blade, dock and desktop-entry logic
         run: |
           node tests/test_blades.js
@@ -47,6 +49,8 @@ jobs:
           sh -n configs/hypr/scripts/qs-toggle.sh
           sh -n tests/test_qs_toggle.sh
           sh -n configs/hypr/scripts/ricelin-style
+          sh -n tools/deploy-style-ui.sh
+          sh -n tests/test_deploy_style_ui.sh
           sh -n tests/test_ricelin_style.sh
 
   qml-runtime:
