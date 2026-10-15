@@ -5,8 +5,6 @@ import QtQuick.Effects
 import QtQuick.Shapes
 import Quickshell
 import Quickshell.Io
-import Quickshell.Networking
-import Quickshell.Bluetooth
 import Quickshell.Hyprland
 import "Singletons"
 
@@ -23,78 +21,25 @@ import "Singletons"
 Item {
     id: pill
 
-   property bool personaRunning: false
-   property bool boomboxRunning: false
-
-   Process {
-       id: personaProbe
-       command: ["sh", "-c",
-           "pgrep -f '[P]ersona-Quickshell' >/dev/null 2>&1"]
-       running: false
-       onExited: (exitCode) => {
-           pill.personaRunning = exitCode === 0;
-       }
-   }
-
-   Process {
-       id: boomboxProbe
-       command: ["sh", "-c",
-           "pgrep -f '[Q]t6-Cava-plugin/main.qml' >/dev/null 2>&1"]
-       running: false
-       onExited: (exitCode) => {
-           pill.boomboxRunning = exitCode === 0;
-       }
-   }
-
-   Timer {
-       interval: 1000
-       running: true
-       repeat: true
-       onTriggered: {
-           if (!personaProbe.running)
-               personaProbe.running = true;
-           if (!boomboxProbe.running)
-               boomboxProbe.running = true;
-       }
-   }
-
-   function togglePersona() {
-       if (pill.personaRunning) {
-           Quickshell.execDetached([
-               "pkill", "-f",
-               "qs -c " + Quickshell.env("HOME") + "/.config/quickshell/Persona-Quickshell"
-           ]);
-       } else {
-           Quickshell.execDetached([
-               "sh", "-c",
-               'QML2_IMPORT_PATH="$HOME/.local/lib/qt6/qml" ' +
-               'LD_LIBRARY_PATH="$HOME/.local/lib/qt6/qml/CavaMonitor:$HOME/.local/lib/qt6/qml:/usr/local/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" ' +
-               'qs -c "$HOME/.config/quickshell/Persona-Quickshell"'
-           ]);
-       }
-   }
-
-   function toggleBoombox() {
-       if (pill.boomboxRunning) {
-           Quickshell.execDetached([
-               "pkill", "-f",
-               "quickshell.*" + Quickshell.env("HOME") + "/Development/Qt6-Cava-plugin/main.qml"
-           ]);
-       } else {
-           Quickshell.execDetached([
-               "sh", "-c",
-               'QML2_IMPORT_PATH="$HOME/.local/lib/qt6/qml" ' +
-               'LD_LIBRARY_PATH="$HOME/.local/lib/qt6/qml/CavaMonitor:/usr/local/lib" ' +
-               'quickshell -p "$HOME/Development/Qt6-Cava-plugin/main.qml"'
-           ]);
-       }
-   }
-
-
     property real s: 1
     property string screenName: ""
     property var barWindow
     property string surface: ""
+
+    /**
+     * Toast swipe offset and fade, written by Toast while dragging and applied
+     * by the host in shell.qml. Once the last card is flung the pill sits
+     * behind the mask at zero opacity; it snaps home unseen and only the fade
+     * animates back.
+     */
+    property real swipeX: 0
+    property real swipeY: 0
+    property real swipeFade: 1
+    Behavior on swipeFade {
+        enabled: !toastLoader.active
+        NumberAnimation { duration: Motion.standard; easing.type: Motion.easeStandard }
+    }
+    onToastActiveChanged: if (!toastActive) { swipeX = 0; swipeY = 0; swipeFade = 1; }
 
     property bool hovered: false
     property bool pinned: false
@@ -128,18 +73,11 @@ Item {
     readonly property bool idlelockOpen: surface === "idlelock"
     readonly property bool animationOpen: surface === "animation"
     readonly property bool fontpickerOpen: surface === "fontpicker"
+    readonly property bool stylesOpen: surface === "styles"
     readonly property bool settingsLike: settingsOpen || appearanceOpen || updatesOpen
         || lookOpen || inputOpen || displayOpen || animationOpen || idlelockOpen || fontpickerOpen
     readonly property bool hasMedia: Players.list.length > 0
 
-    readonly property var netDevices: (typeof Networking !== "undefined" && Networking && Networking.devices) ? Networking.devices.values : []
-    readonly property var wifiDev: netDevices.find(function(d) { return d && d.type === DeviceType.Wifi }) || null
-    readonly property bool wifiOn: (typeof Networking !== "undefined" && Networking) ? Networking.wifiEnabled : false
-    readonly property var wifiNets: (wifiDev && wifiDev.networks) ? wifiDev.networks.values : []
-    readonly property var wifiActive: wifiNets.find(function(n) { return n && n.connected }) || null
-    readonly property real wifiLevel: (wifiActive && wifiActive.signalStrength) || 0
-    readonly property var btAdapter: (typeof Bluetooth !== "undefined" && Bluetooth) ? Bluetooth.defaultAdapter : null
-    readonly property bool btOn: btAdapter ? btAdapter.enabled === true : false
     readonly property bool surfaceOpen: surface.length > 0
     property bool hoverLatch: false
     property bool captureClosing: false
@@ -245,6 +183,7 @@ Item {
     readonly property real idlelockW: 392 * s
     readonly property real animationW: 392 * s
     readonly property real fontpickerW: 360 * s
+    readonly property real stylesW: 340 * s
     readonly property real toastW: 342 * s
     readonly property real quickChooseW: 344 * s
     readonly property real quickChooseH: 76 * s
@@ -308,7 +247,8 @@ Item {
         look:       { size: () => Qt.size(lookW, surfaceItem(ldLook).implicitHeight + 29 * s), ame: () => surfaceItem(ldLook) },
         idlelock:   { size: () => Qt.size(idlelockW, surfaceItem(ldIdlelock).implicitHeight + 29 * s), ame: () => surfaceItem(ldIdlelock) },
         animation:  { size: () => Qt.size(animationW, surfaceItem(ldAnimation).implicitHeight + 29 * s), ame: () => surfaceItem(ldAnimation) },
-        fontpicker: { size: () => Qt.size(fontpickerW, surfaceItem(ldFontpicker).implicitHeight + 29 * s), ame: () => surfaceItem(ldFontpicker) }
+        fontpicker: { size: () => Qt.size(fontpickerW, surfaceItem(ldFontpicker).implicitHeight + 29 * s), ame: () => surfaceItem(ldFontpicker) },
+        styles:     { size: () => Qt.size(stylesW, surfaceItem(ldStyles).implicitHeight + 33 * s), ame: () => surfaceItem(ldStyles) }
     })
 
     readonly property string mode: captureClosing ? "rest"
@@ -499,7 +439,7 @@ Item {
             ldWorkspaces.item.closeForm();
             return;
         }
-        if (pill.appearanceOpen || pill.updatesOpen || pill.displayOpen || pill.inputOpen || pill.lookOpen || pill.idlelockOpen || pill.animationOpen || pill.workspacesOpen) {
+        if (pill.appearanceOpen || pill.updatesOpen || pill.displayOpen || pill.inputOpen || pill.lookOpen || pill.idlelockOpen || pill.animationOpen || pill.workspacesOpen || pill.stylesOpen) {
             pill.requestSurface("settings");
             return;
         }
@@ -818,30 +758,14 @@ property real morphRadius: (mode === "rest" || mode === "hover" || mode === "gam
         void pill.width;
         void pill.height;
         const drop = 12 * pill.s;
-        if (soulTarget === "wifi")
-            return wifiIcon.mapToItem(pill, wifiIcon.width / 2, wifiIcon.height + drop * 0.55);
-        if (soulTarget === "bt")
-            return btIcon.mapToItem(pill, btIcon.width / 2, btIcon.height + drop * 0.55);
-        if (soulTarget === "battery")
-            return batteryIcon.mapToItem(pill, batteryIcon.width / 2, batteryIcon.height + drop * 0.55);
-        if (soulTarget === "inbox")
-            return inboxIcon.mapToItem(pill, inboxIcon.width / 2, inboxIcon.height + drop * 0.55);
-        if (soulTarget === "mixer")
-            return mixerIcon.mapToItem(pill, mixerIcon.width / 2, mixerIcon.height + drop * 0.55);
         if (soulTarget === "power")
             return powerIcon.mapToItem(pill, powerIcon.width / 2, powerIcon.height + drop * 0.55);
+        if (soulTarget === "styles")
+            return stylesIcon.mapToItem(pill, stylesIcon.width / 2, stylesIcon.height + drop * 0.55);
         if (soulTarget === "settings")
             return settingsIcon.mapToItem(pill, settingsIcon.width / 2, settingsIcon.height + drop * 0.55);
         if (soulTarget === "recorder")
             return recorderIcon.mapToItem(pill, recorderIcon.width / 2, recorderIcon.height + drop * 0.55);
-        if (soulTarget === "sysmon")
-            return sysmonIcon.mapToItem(pill, sysmonIcon.width / 2, sysmonIcon.height + drop * 0.55);
-        if (soulTarget === "apps")
-            return appsIcon.mapToItem(pill, appsIcon.width / 2, appsIcon.height + drop * 0.55);
-        if (soulTarget === "persona")
-            return personaIcon.mapToItem(pill, personaIcon.width / 2, personaIcon.height + drop * 0.55);
-        if (soulTarget === "boombox")
-            return boomboxIcon.mapToItem(pill, boomboxIcon.width / 2, boomboxIcon.height + drop * 0.55);
         if (soulTarget === "ws" && soulWsIndex >= 0) {
             void ws.activeName;
             void ws.width;
@@ -1616,199 +1540,6 @@ property real morphRadius: (mode === "rest" || mode === "hover" || mode === "gam
                     }
                 }
 
-                Row {
-                    anchors.verticalCenter: parent.verticalCenter
-                    visible: pill.wifiDev !== null || pill.btAdapter !== null || Battery.present
-                    spacing: 12 * pill.s
-
-                    Item {
-                        id: wifiIcon
-                        anchors.verticalCenter: parent.verticalCenter
-                        visible: pill.wifiDev !== null
-                        width: 15 * pill.s
-                        height: 15 * pill.s
-
-                        WifiGlyph {
-                            anchors.centerIn: parent
-                            s: pill.s
-                            level: pill.wifiLevel
-                            on: pill.wifiOn
-                            stroke: 1.7
-                        }
-
-                        MouseArea {
-                            id: wifiArea
-                            anchors.fill: parent
-                            anchors.margins: -6 * pill.s
-                            hoverEnabled: true
-                            enabled: hover.live
-                            acceptedButtons: Qt.LeftButton | Qt.RightButton
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: (e) => {
-                                if (e.button === Qt.RightButton) {
-                                    if (typeof Networking !== "undefined" && Networking)
-                                        Networking.wifiEnabled = !Networking.wifiEnabled;
-                                    return;
-                                }
-                                pill.requestSurface("wifi");
-                            }
-                            onContainsMouseChanged: if (containsMouse) pill.soulTarget = "wifi"
-                        }
-                    }
-
-                    Item {
-                        id: btIcon
-                        anchors.verticalCenter: parent.verticalCenter
-                        visible: pill.btAdapter !== null
-                        width: 15 * pill.s
-                        height: 15 * pill.s
-
-                        GlyphIcon {
-                            anchors.fill: parent
-                            name: "bluetooth"
-                            color: btArea.containsMouse ? Theme.cream
-                                : (pill.btOn ? Theme.iconDim : Qt.alpha(Theme.iconDim, 0.4))
-                            stroke: 1.7
-                        }
-
-                        MouseArea {
-                            id: btArea
-                            anchors.fill: parent
-                            anchors.margins: -6 * pill.s
-                            hoverEnabled: true
-                            enabled: hover.live
-                            acceptedButtons: Qt.LeftButton | Qt.RightButton
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: (e) => {
-                                if (e.button === Qt.RightButton) {
-                                    if (pill.btAdapter)
-                                        pill.btAdapter.enabled = !pill.btAdapter.enabled;
-                                    return;
-                                }
-                                pill.requestSurface("bt");
-                            }
-                            onContainsMouseChanged: if (containsMouse) pill.soulTarget = "bt"
-                        }
-                    }
-
-                    Item {
-                        id: batteryIcon
-                        anchors.verticalCenter: parent.verticalCenter
-                        visible: Battery.present
-                        width: battPct.implicitWidth
-                        height: 17 * pill.s
-
-                        Text {
-                            id: battPct
-                            anchors.centerIn: parent
-                            text: Battery.pct + "%"
-                            color: Battery.low ? Theme.vermLit : (Battery.charging ? Theme.flameGlow : Theme.subtle)
-                            font.family: Theme.font
-                            font.pixelSize: 13 * pill.s
-                            font.weight: Battery.charging ? Font.DemiBold : Font.Medium
-                            font.features: { "tnum": 1 }
-                        }
-
-                        MouseArea {
-                            id: batteryArea
-                            anchors.fill: parent
-                            anchors.margins: -6 * pill.s
-                            hoverEnabled: true
-                            enabled: hover.live
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: pill.requestSurface("battery")
-                            onContainsMouseChanged: if (containsMouse) pill.soulTarget = "battery"
-                        }
-                    }
-                }
-
-                Item {
-                    id: inboxIcon
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: 17 * pill.s
-                    height: 17 * pill.s
-
-                    GlyphIcon {
-                        anchors.fill: parent
-                        name: "inbox"
-                        color: inboxArea.containsMouse ? Theme.cream : Theme.iconDim
-                        stroke: 1.7
-                    }
-
-                    Rectangle {
-                        visible: Notifs.unread > 0
-                        anchors.top: parent.top
-                        anchors.right: parent.right
-                        anchors.topMargin: -2 * pill.s
-                        anchors.rightMargin: -2 * pill.s
-                        width: 5 * pill.s
-                        height: 5 * pill.s
-                        radius: width / 2
-                        color: Theme.flameGlow
-                    }
-
-                    MouseArea {
-                        id: inboxArea
-                        anchors.fill: parent
-                        anchors.margins: -6 * pill.s
-                        hoverEnabled: true
-                        enabled: hover.live
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: pill.requestSurface("link")
-                        onContainsMouseChanged: if (containsMouse) pill.soulTarget = "inbox"
-                    }
-                }
-
-                Item {
-                    id: mixerIcon
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: 17 * pill.s
-                    height: 17 * pill.s
-
-                    GlyphIcon {
-                        anchors.fill: parent
-                        name: "mixer"
-                        color: mixerArea.containsMouse ? Theme.cream : Theme.iconDim
-                        stroke: 1.7
-                    }
-
-                    MouseArea {
-                        id: mixerArea
-                        anchors.fill: parent
-                        anchors.margins: -6 * pill.s
-                        hoverEnabled: true
-                        enabled: hover.live
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: pill.requestSurface("mixer")
-                        onContainsMouseChanged: if (containsMouse) pill.soulTarget = "mixer"
-                    }
-                }
-
-                Item {
-                    id: sysmonIcon
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: 17 * pill.s
-                    height: 17 * pill.s
-
-                    GlyphIcon {
-                        anchors.fill: parent
-                        name: "monitor"
-                        color: sysmonArea.containsMouse ? Theme.cream : Theme.iconDim
-                        stroke: 1.7
-                    }
-
-                    MouseArea {
-                        id: sysmonArea
-                        anchors.fill: parent
-                        anchors.margins: -6 * pill.s
-                        hoverEnabled: true
-                        enabled: hover.live
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: pill.requestSurface("sysmon")
-                        onContainsMouseChanged: if (containsMouse) pill.soulTarget = "sysmon"
-                    }
-                }
-
                 Item {
                     id: recorderIcon
                     anchors.verticalCenter: parent.verticalCenter
@@ -1863,81 +1594,27 @@ property real morphRadius: (mode === "rest" || mode === "hover" || mode === "gam
                 }
 
                 Item {
-                    id: personaIcon
+                    id: stylesIcon
                     anchors.verticalCenter: parent.verticalCenter
                     width: 17 * pill.s
                     height: 17 * pill.s
 
                     GlyphIcon {
                         anchors.fill: parent
-                        name: "screen-twinkle"
-                        color: personaArea.containsMouse
-                            ? Theme.cream
-                            : (pill.personaRunning ? Theme.vermLit : Theme.iconDim)
+                        name: "palette"
+                        color: stylesArea.containsMouse || pill.stylesOpen ? Theme.cream : Theme.iconDim
                         stroke: 1.7
                     }
 
                     MouseArea {
-                        id: personaArea
+                        id: stylesArea
                         anchors.fill: parent
                         anchors.margins: -6 * pill.s
                         hoverEnabled: true
                         enabled: hover.live
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: pill.togglePersona()
-                        onContainsMouseChanged: if (containsMouse) pill.soulTarget = "persona"
-                    }
-                }
-
-                Item {
-                    id: boomboxIcon
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: 17 * pill.s
-                    height: 17 * pill.s
-
-                    GlyphIcon {
-                        anchors.fill: parent
-                        name: "boombox"
-                        color: boomboxArea.containsMouse
-                            ? Theme.cream
-                            : (pill.boomboxRunning ? Theme.vermLit : Theme.iconDim)
-                        stroke: 1.7
-                    }
-
-                    MouseArea {
-                        id: boomboxArea
-                        anchors.fill: parent
-                        anchors.margins: -6 * pill.s
-                        hoverEnabled: true
-                        enabled: hover.live
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: pill.toggleBoombox()
-                        onContainsMouseChanged: if (containsMouse) pill.soulTarget = "boombox"
-                    }
-                }
-
-                Item {
-                    id: appsIcon
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: 17 * pill.s
-                    height: 17 * pill.s
-
-                    GlyphIcon {
-                        anchors.fill: parent
-                        name: "app-window"
-                        color: appsArea.containsMouse ? Theme.cream : Theme.iconDim
-                        stroke: 1.7
-                    }
-
-                    MouseArea {
-                        id: appsArea
-                        anchors.fill: parent
-                        anchors.margins: -6 * pill.s
-                        hoverEnabled: true
-                        enabled: hover.live
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: pill.requestSurface("apps")
-                        onContainsMouseChanged: if (containsMouse) pill.soulTarget = "apps"
+                        onClicked: pill.requestSurface("styles")
+                        onContainsMouseChanged: if (containsMouse) pill.soulTarget = "styles"
                     }
                 }
 
@@ -2353,6 +2030,19 @@ property real morphRadius: (mode === "rest" || mode === "hover" || mode === "gam
         }
     }
 
+    Loader {
+        id: ldStyles
+        active: false
+        anchors.fill: parent
+        sourceComponent: StylesSurface {
+            s: pill.s
+            open: pill.stylesOpen
+            morphCloseness: pill.morphCloseness
+            onRequestClose: pill.requestClose()
+            onRequestSurface: (name) => pill.requestSurface(name)
+        }
+    }
+
     Osd {
         id: osd
         anchors.fill: parent
@@ -2397,6 +2087,7 @@ property real morphRadius: (mode === "rest" || mode === "hover" || mode === "gam
                 anchors.top: parent.top
                 s: pill.s
                 live: pill.mode === "toast"
+                host: pill
                 notif: Notifs.popups.length > 0 ? Notifs.popups[Notifs.popups.length - 1] : null
             }
 

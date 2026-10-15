@@ -2,6 +2,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import "../lib/desktopentry.js" as DesktopImport
 
 /**
  * Execution layer: turns an AppRegistry record into a real process and keeps
@@ -32,6 +33,7 @@ Singleton {
 
     /** appId -> live Process, kept outside runningIds since UI never binds to the process object itself. */
     property var _procs: ({})
+    property var _stopRequested: ({})
     property int _runningGameCount: 0
 
     function isRunning(appId) {
@@ -65,6 +67,13 @@ Singleton {
         return i > 0 ? p.slice(0, i) : p;
     }
 
+    /** Resolve a native desktop entry by persisted ID, then support old ID/name records. */
+    function desktopEntryFor(app) {
+        if (!app || app.runner !== "native")
+            return null;
+        return DesktopImport.findEntry(DesktopEntries.applications.values || [], app);
+    }
+
     /** Builds { command, environment, workingDirectory } for the app's current runner. Extracted from launch() so AddApplicationSheet can preview it before saving. */
     function buildInvocation(app) {
         var normalized = AppRegistry.normalizeRecord(app);
@@ -75,7 +84,8 @@ Singleton {
         if (normalized.performance && normalized.performance.mangohud) env.MANGOHUD = "1";
 
         var command;
-        var workingDirectory = normalized.workingDirectory && normalized.workingDirectory.length > 0 ? normalized.workingDirectory : root.dirName(normalized.executable);
+        var desktopEntry = normalized.runner === "native" ? root.desktopEntryFor(normalized) : null;
+        var workingDirectory = DesktopImport.workingDirectoryFor(normalized, desktopEntry);
         var rt = normalized.runtime || {};
         if (normalized.runner === "umu") {
             env.GAMEID = normalized.umuId && normalized.umuId.length > 0 ? normalized.umuId : ("umu-" + normalized.id);
@@ -89,7 +99,7 @@ Singleton {
             var wineBin = normalized.runner === "wine-staging" && !root.wineIsStaging ? "wine-staging" : "wine";
             command = [wineBin, normalized.executable].concat(normalized.args || []);
         } else {
-            command = [normalized.executable].concat(normalized.args || []);
+            command = DesktopImport.nativeCommand(normalized, desktopEntry);
         }
         if (normalized.performance && normalized.performance.mangohud) command = ["mangohud"].concat(command);
         if (normalized.performance && normalized.performance.gamescope) command = ["gamescope", "--"].concat(command);
@@ -102,8 +112,12 @@ Singleton {
     Component {
         id: procComponent
         Process {
+            id: processRoot
+            property string capturedStderr: ""
             stdout: StdioCollector {}
-            stderr: StdioCollector {}
+            stderr: StdioCollector {
+                onStreamFinished: processRoot.capturedStderr = this.text
+            }
         }
     }
 
@@ -126,6 +140,7 @@ Singleton {
             return;
 
         root._procs[appId] = proc;
+        root._stopRequested = Object.assign({}, root._stopRequested, { [appId]: false });
         root.runningIds = Object.assign({}, root.runningIds, {
             [appId]: { startedAt: Date.now(), pid: 0 }
         });
@@ -141,6 +156,24 @@ Singleton {
         pidTimer.createObject(root, { appId: appId, proc: proc });
 
         proc.exited.connect(function (exitCode, exitStatus) {
+            var launched = root.runningIds[appId];
+            var elapsedMs = launched ? Date.now() - launched.startedAt : 0;
+            var stopFlags = Object.assign({}, root._stopRequested);
+            var intentionallyStopped = stopFlags[appId] === true;
+            delete stopFlags[appId];
+            root._stopRequested = stopFlags;
+
+            if (exitCode !== 0 && !intentionallyStopped) {
+                var detail = String(proc.capturedStderr || "").trim();
+                if (detail.length === 0)
+                    detail = "Process exited with status " + exitCode + ".";
+                if (detail.length > 420)
+                    detail = detail.slice(0, 417) + "...";
+                console.warn("Ricelin: application exited with status", exitCode, app.name, detail);
+                if (elapsedMs < 5000)
+                    Quickshell.execDetached(["notify-send", "-u", "normal", "-a", "Ricelin", "Could not start " + app.name, detail]);
+            }
+
             delete root._procs[appId];
             var next = Object.assign({}, root.runningIds);
             delete next[appId];
@@ -177,8 +210,10 @@ Singleton {
     /** Graceful stop: SIGTERM to our tracked process (Process.running = false), giving Wine/UMU a chance to shut the game down cleanly. */
     function stop(appId) {
         var proc = root._procs[appId];
-        if (proc)
+        if (proc) {
+            root._stopRequested = Object.assign({}, root._stopRequested, { [appId]: true });
             proc.running = false;
+        }
     }
 
     /** Best-effort tree kill for a wedged process: matches the game's own executable path rather than the wine/umu-run wrapper, so the wrapper notices its child died and exits on its own — which fires the normal exited() cleanup above. */
@@ -186,6 +221,7 @@ Singleton {
         var proc = root._procs[appId];
         var pid = proc ? (proc.processId || 0) : root.pidFor(appId);
         if (pid <= 0) return;
+        root._stopRequested = Object.assign({}, root._stopRequested, { [appId]: true });
        Quickshell.execDetached(["sh", "-c", 'kill_tree() { for c in $(pgrep -P "$1" 2>/dev/null); do kill_tree "$c"; done; kill -KILL "$1" 2>/dev/null; }; kill_tree "$1"', "_", String(pid)]);
     }
 
@@ -206,9 +242,10 @@ Singleton {
         }
     }
 
-    function pickFile(callback) {
+    function pickFile(callback, title) {
+        var pickerTitle = title || "Select executable";
         root._runPicker(RuntimeManager.hasZenity
-            ? ["zenity", "--file-selection", "--title=Select executable"]
+            ? ["zenity", "--file-selection", "--title=" + pickerTitle]
             : RuntimeManager.hasKdialog
                 ? ["kdialog", "--getopenfilename"]
                 : [], callback);
