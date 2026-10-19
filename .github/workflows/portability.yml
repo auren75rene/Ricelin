@@ -33,6 +33,8 @@ jobs:
           node tests/test_recorderprocess.js
       - name: prefix manager safety self-check
         run: sh tests/test_ricelin_prefix.sh
+      - name: Games directory discovery self-check
+        run: python3 tests/test_ricelin_games_scan.py
       - name: application registry parser self-check
         run: node tests/test_app_registry_store.js
       - name: Deployment installer self-check
