@@ -33,8 +33,12 @@ Singleton {
     property string recoveryBackupPath: ""
     property string recoveryStatus: ""
 
-    readonly property string dir: (Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config")) + "/ricelin"
+    readonly property string configHome: Quickshell.env("XDG_CONFIG_HOME") || ((Quickshell.env("HOME") || "") + "/.config")
+    readonly property string dataHome: Quickshell.env("XDG_DATA_HOME") || ((Quickshell.env("HOME") || "") + "/.local/share")
+    readonly property string dir: root.configHome + "/ricelin"
     readonly property string path: root.dir + "/applications.json"
+    readonly property string gamesDirectory: Quickshell.env("RICELIN_GAMES_DIR") || ((Quickshell.env("HOME") || "") + "/Games")
+    readonly property string gamesScanner: root.configHome + "/hypr/scripts/ricelin-games-scan"
 
     readonly property var categories: [
         { id: "game", label: "Games", glyph: "gamepad" },
@@ -62,6 +66,12 @@ Singleton {
             iconImage: "",
             runner: "auto",
             executable: "",
+            sourcePath: "",
+            gameFolder: "",
+            candidateExecutables: [],
+            needsSetup: false,
+            discovered: false,
+            folderMissing: false,
             desktopEntryId: "",
             workingDirectory: "",
             prefix: "",
@@ -100,6 +110,8 @@ Singleton {
         rec.env = Object.assign({}, input && input.env ? input.env : {});
         rec.dllOverrides = Object.assign({}, input && input.dllOverrides ? input.dllOverrides : {});
         rec.args = Array.isArray(input && input.args) ? input.args.slice() : [];
+        rec.candidateExecutables = Array.isArray(input && input.candidateExecutables)
+            ? input.candidateExecutables.map(item => Object.assign({}, item)) : [];
         rec.desktopEntryId = String(input && input.desktopEntryId ? input.desktopEntryId : "");
 
         var envInput = input && input.environment ? input.environment : {};
@@ -194,6 +206,172 @@ Singleton {
         return rec;
     }
 
+    function pathWithin(child, parent) {
+        var c = String(child || "").replace(/\\/+$/, "");
+        var p = String(parent || "").replace(/\\/+$/, "");
+        return c.length > 0 && p.length > 0 && (c === p || c.indexOf(p + "/") === 0);
+    }
+
+    function sameJson(a, b) {
+        try { return JSON.stringify(a) === JSON.stringify(b); }
+        catch (e) { return false; }
+    }
+
+    /*
+     * Reconcile the read-only folder index into the registry. Discovery only
+     * creates/updates metadata; it never launches a candidate and never
+     * deletes a user's record when a folder disappears.
+     */
+    function syncDiscovered(index) {
+        if (!root.ready || root.loadError || !index || !Array.isArray(index.games))
+            return;
+
+        var next = root.apps.slice();
+        var seen = ({});
+        var changed = false;
+        var games = index.games;
+        var scanRoot = String(index.root || root.gamesDirectory);
+
+        for (var g = 0; g < games.length; ++g) {
+            var game = games[g];
+            var source = String(game && game.sourcePath || "");
+            if (!source)
+                continue;
+            seen[source] = true;
+
+            var at = -1;
+            for (var i = 0; i < next.length; ++i) {
+                if (String(next[i].sourcePath || "") === source) {
+                    at = i;
+                    break;
+                }
+            }
+
+            // Link an existing manually-created entry to its folder if the
+            // selected executable is already inside it. Do not create a duplicate.
+            if (at < 0) {
+                for (var j = 0; j < next.length; ++j) {
+                    var existing = next[j];
+                    if (!existing.sourcePath && existing.executable
+                            && pathWithin(existing.executable, String(game.gameFolder || source))) {
+                        at = j;
+                        break;
+                    }
+                }
+            }
+
+            if (at >= 0) {
+                var old = next[at];
+                var replacement = Object.assign({}, old, {
+                    sourcePath: source,
+                    gameFolder: String(game.gameFolder || source),
+                    candidateExecutables: Array.isArray(game.candidateExecutables) ? game.candidateExecutables : [],
+                    discovered: true,
+                    folderMissing: false
+                });
+                if ((!old.executable || old.needsSetup) && game.executable) {
+                    replacement.executable = String(game.executable);
+                    replacement.workingDirectory = String(game.workingDirectory || game.gameFolder || source);
+                    replacement.needsSetup = false;
+                    if (/\\.exe$/i.test(replacement.executable) && !replacement.prefix)
+                        replacement.prefix = root.dataHome + "/ricelin/prefixes/" + String(old.id);
+                }
+                replacement = root.normalizeRecord(replacement);
+                if (!root.sameJson(old, replacement)) {
+                    next[at] = replacement;
+                    changed = true;
+                }
+                continue;
+            }
+
+            var name = String(game.name || source.split("/").pop() || "Game");
+            var id = root.uniqueId(root.slugify(name));
+            var executable = String(game.executable || "");
+            var candidates = Array.isArray(game.candidateExecutables) ? game.candidateExecutables : [];
+            var hasWindowsCandidate = /\\.exe$/i.test(executable)
+                || candidates.some(item => String(item && item.kind || "") === "windows");
+            var order = 0;
+            for (var k = 0; k < next.length; ++k)
+                order = Math.max(order, Number(next[k].bladeOrder) || 0);
+
+            var record = root.normalizeRecord({
+                id: id,
+                name: name,
+                category: "game",
+                favorite: false,
+                blade: "auto",
+                bladeOrder: order + 1,
+                runner: "auto",
+                executable: executable,
+                workingDirectory: String(game.workingDirectory || game.gameFolder || source),
+                prefix: hasWindowsCandidate ? (root.dataHome + "/ricelin/prefixes/" + id) : "",
+                sourcePath: source,
+                gameFolder: String(game.gameFolder || source),
+                candidateExecutables: candidates,
+                needsSetup: !!game.needsSetup || !executable,
+                discovered: true,
+                folderMissing: false,
+                createdAt: Date.now()
+            });
+            next.push(record);
+            changed = true;
+        }
+
+        for (var m = 0; m < next.length; ++m) {
+            var saved = next[m];
+            if (!saved.discovered || !saved.sourcePath || !root.pathWithin(saved.sourcePath, scanRoot))
+                continue;
+            var isMissing = !seen[String(saved.sourcePath)];
+            if (!!saved.folderMissing !== isMissing) {
+                next[m] = root.normalizeRecord(Object.assign({}, saved, { folderMissing: isMissing }));
+                changed = true;
+            }
+        }
+
+        if (changed) {
+            root.apps = next;
+            root.persist();
+        }
+    }
+
+    function scanGames() {
+        if (!root.ready || root.loadError || gamesScanProc.running)
+            return;
+        gamesScanProc.running = true;
+    }
+
+    Process {
+        id: gamesScanProc
+        command: ["python3", root.gamesScanner, "--root", root.gamesDirectory]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    root.syncDiscovered(JSON.parse(this.text));
+                } catch (e) {
+                    console.warn("AppRegistry: the Games scanner returned invalid data:", String(e));
+                }
+            }
+        }
+        stderr: StdioCollector {
+            onStreamFinished: {
+                var message = String(this.text || "").trim();
+                if (message.length > 0)
+                    console.warn("AppRegistry Games scanner:", message);
+            }
+        }
+        onExited: function(exitCode) {
+            if (exitCode !== 0)
+                console.warn("AppRegistry: Games scan exited with status", exitCode);
+        }
+    }
+
+    Timer {
+        interval: 30000
+        repeat: true
+        running: root.ready && !root.loadError
+        onTriggered: root.scanGames()
+    }
+
     function update(id, patch) {
         if (!root.ready || root.loadError) return;
         root.apps = root.apps.map(a => a.id === id ? root.normalizeRecord(Object.assign({}, a, patch || {})) : a);
@@ -251,6 +429,7 @@ Singleton {
                 root.ready = true;
                 root.recoveryStatus = "Original registry backed up to " + root.recoveryBackupPath
                     + ". Defaults were written; the original file contents remain in that backup.";
+                root.scanGames();
             } else if (root.recoveryStatus.indexOf("Could not save applications.json:") === 0) {
                 root.recoveryStatus = "";
             }
@@ -338,6 +517,7 @@ Singleton {
             root.loadError = "";
             root.ready = true;
             root.seedDefaults();
+            root.scanGames();
             return;
         }
         if (pathState !== 0) {
@@ -368,6 +548,7 @@ Singleton {
         root.apps = records.map(a => root.normalizeRecord(a));
         root.loadError = "";
         root.ready = true;
+        root.scanGames();
     }
 
     // This recovery path is deliberately explicit: it backs up the exact old
