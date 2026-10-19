@@ -107,6 +107,35 @@ check("missing app/window records do not match", () => {
     assert.ok(!B.matchesWindow(rec({}), null, null));
 });
 
+
+console.log("screen-fitted ring geometry");
+check("one ring uses the requested blade length", () => {
+    const fit = B.fitLayout(6, 6, 250, 929, 255, 16, 64);
+    assert.strictEqual(fit.ringCount, 1);
+    assert.strictEqual(fit.bladeLength, 255);
+    assert.strictEqual(fit.outerRadius, 505);
+    assert.ok(!fit.overflows);
+});
+check("two and three rings remain separated and within the screen radius", () => {
+    for (const count of [7, 12, 13, 18]) {
+        const fit = B.fitLayout(count, 6, 250, 929, 255, 16, 64);
+        assert.ok(fit.outerRadius <= 929 + 0.001, count + " overflows");
+        assert.ok(fit.ringStep >= fit.bladeLength + fit.ringGap - 1e-9);
+        assert.strictEqual(fit.placements.length, count);
+    }
+});
+check("larger layouts shorten blades instead of overlapping radial bands", () => {
+    for (const count of [24, 30, 36, 42, 48]) {
+        const fit = B.fitLayout(count, 6, 250, 929, 255, 16, 64);
+        assert.ok(fit.bladeLength < 255, count + " should fit by shortening cards");
+        assert.ok(fit.outerRadius <= 929 + 0.001, count + " overflows");
+    }
+});
+check("an extreme game count reports geometry overflow instead of claiming it fits", () => {
+    const fit = B.fitLayout(54, 6, 250, 929, 255, 16, 64);
+    assert.ok(fit.overflows);
+});
+
 console.log("window activation order");
 const windows = [
     { address: "0x01", workspace: "1" },
