@@ -59,6 +59,28 @@ expect_ok 'creates a new Wine prefix and marks it' create "$prefix" wine "$exe" 
 [ -f "$prefix/system.reg" ] || bad 'wineboot was not invoked'
 ok 'new Wine prefix initialized'
 
+# ensure is the non-destructive first-launch path: reuse valid prefixes, create
+# absent/empty ones, and fail closed for unrelated populated directories.
+printf 'user data survives ensure\n' > "$prefix/user-data-sentinel"
+expect_ok 'ensure reuses an existing recognized prefix' ensure "$prefix" wine "$exe" "$workdir"
+grep -q 'user data survives ensure' "$prefix/user-data-sentinel" || bad 'ensure modified existing prefix data'
+ok 'existing prefix content survives ensure'
+
+empty_ensure_parent="$home/Games/EnsureEmpty"
+empty_ensure="$empty_ensure_parent/prefix"
+mkdir -p -- "$empty_ensure"
+expect_ok 'ensure initializes an empty destination' ensure "$empty_ensure" wine "$exe" "$workdir"
+[ -f "$empty_ensure/.ricelin-prefix" ] && [ -f "$empty_ensure/system.reg" ] || bad 'ensure did not initialize an empty destination'
+ok 'empty destination becomes a complete managed prefix'
+
+unrecognized_parent="$home/Games/EnsureUnrecognized"
+unrecognized="$unrecognized_parent/prefix"
+mkdir -p -- "$unrecognized"
+printf 'do not overwrite me\n' > "$unrecognized/valuable-data"
+expect_fail 'ensure rejects an unrecognized populated directory' ensure "$unrecognized" wine "$exe" "$workdir"
+grep -q 'do not overwrite me' "$unrecognized/valuable-data" || bad 'ensure changed unrecognized directory data'
+ok 'unrecognized data survives failed ensure'
+
 expect_ok 'open delegates to xdg-open successfully' open "$prefix" wine "$exe" "$workdir"
 [ "$(sed -n '1p' "$XDG_OPEN_LOG")" = "1" ] || bad 'xdg-open did not receive exactly one argument'
 [ "$(sed -n '2p' "$XDG_OPEN_LOG")" = "$prefix/drive_c" ] || bad 'xdg-open received an unexpected path or option'
