@@ -11,6 +11,9 @@ ShellRoot {
     property int attempts: 0
     property string testAppId: ""
     property bool launchDispatched: false
+    property bool prefixEnsureDone: false
+    property string prefixEnsureError: ""
+    property bool gameScanChecked: false
 
     Component {
         id: addStyleFormComponent
@@ -52,7 +55,8 @@ ShellRoot {
             EnvironmentManager.winetricks,
             EnvironmentManager.clone,
             EnvironmentManager.reset,
-            EnvironmentManager.remove
+            EnvironmentManager.remove,
+            EnvironmentManager.ensurePrefix
         ]
         for (var i = 0; i < methods.length; ++i) {
             if (typeof methods[i] !== "function") {
@@ -69,13 +73,17 @@ ShellRoot {
             return
         }
 
-        if (!EnvironmentManager.create({
+        if (!EnvironmentManager.ensurePrefix({
             prefix: prefix,
             runner: "umu",
             executable: executable,
             workingDirectory: workingDirectory
+        }, function(ok, message) {
+            root.prefixEnsureDone = true;
+            if (!ok)
+                root.prefixEnsureError = String(message || "unknown prefix preparation error");
         })) {
-            fail("prefix create action was not dispatched")
+            fail("prefix ensure action was not dispatched")
             return
         }
 
@@ -136,11 +144,44 @@ ShellRoot {
                 return
             }
 
+            if (root.prefixEnsureError.length > 0) {
+                root.fail("prefix ensure failed: " + root.prefixEnsureError)
+                return
+            }
+            if (!root.prefixEnsureDone)
+                return
+
             if (!AppRegistry.ready)
                 return
             if (AppRegistry.loadError.length > 0) {
                 root.fail("application registry did not load: " + AppRegistry.loadError)
                 return
+            }
+
+            var expectedGameFolder = Quickshell.env("RICELIN_TEST_GAME_FOLDER") || ""
+            var expectedGameExecutable = Quickshell.env("RICELIN_TEST_EXECUTABLE") || ""
+            if (expectedGameFolder.length > 0 && !root.gameScanChecked) {
+                var discoveredGame = null
+                for (var g = 0; g < AppRegistry.apps.length; ++g) {
+                    var gameRecord = AppRegistry.apps[g]
+                    if (gameRecord && gameRecord.discovered
+                            && String(gameRecord.sourcePath || "") === expectedGameFolder) {
+                        discoveredGame = gameRecord
+                        break
+                    }
+                }
+                // The scanner is an asynchronous Process; let its first poll finish.
+                if (!discoveredGame)
+                    return
+                if (String(discoveredGame.executable || "") !== expectedGameExecutable || discoveredGame.needsSetup) {
+                    root.fail("Games scanner did not register the expected executable: " + JSON.stringify(discoveredGame))
+                    return
+                }
+                if (String(discoveredGame.prefix || "").indexOf("/ricelin/prefixes/") < 0) {
+                    root.fail("discovered Windows game did not receive a dedicated prefix outside its game folder")
+                    return
+                }
+                root.gameScanChecked = true
             }
 
             var desktopExecutable = Quickshell.env("RICELIN_TEST_DESKTOP_EXECUTABLE") || ""
