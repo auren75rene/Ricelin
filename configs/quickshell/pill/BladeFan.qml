@@ -322,17 +322,23 @@ Item {
                             var base = fan.model.labelFor(blade.index);
                             if (blade.appState === "running")
                                 return base + "  ·  running";
+                            if (blade.appState === "preparing")
+                                return "preparing game prefix";
                             if (blade.appState === "launching")
                                 return base + "  ·  launching";
                             if (blade.appState === "waiting")
                                 return "waiting for empty workspace";
                             if (blade.appState === "stopping")
                                 return "stopping";
+                            if (blade.appState === "setup")
+                                return "choose launch executable";
+                            if (blade.appState === "missing")
+                                return "game folder missing";
                             if (blade.appState === "failed")
                                 return "needs attention";
                             return base;
                         }
-                        color: blade.appState === "failed" ? Theme.vermLit
+                        color: ["failed", "setup", "missing"].indexOf(blade.appState) >= 0 ? Theme.vermLit
                             : (blade.appState === "idle" ? Theme.faint : Theme.flameGlow)
                         font.family: Theme.font
                         font.pixelSize: 10 * fan.s
@@ -350,7 +356,7 @@ Item {
                     height: width
                     radius: width / 2
                     visible: blade.appState !== "idle"
-                    color: blade.appState === "failed" ? Theme.vermLit : Theme.onGlow
+                    color: ["failed", "setup", "missing"].indexOf(blade.appState) >= 0 ? Theme.vermLit : Theme.onGlow
                     SequentialAnimation on opacity {
                         running: dot.visible
                         loops: Animation.Infinite
