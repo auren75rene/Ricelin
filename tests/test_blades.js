@@ -8,7 +8,7 @@ const vm = require("vm");
 const assert = require("assert");
 
 const file = path.join(__dirname, "..", "configs", "quickshell", "pill", "lib", "blades.js");
-const src = fs.readFileSync(file, "utf8").replace(/^\.pragma.*$/m, "");
+const src = fs.readFileSync(file, "utf8").replace(/^\\.pragma.*$/m, "");
 const ctx = {};
 vm.createContext(ctx);
 vm.runInContext(src, ctx);
@@ -17,7 +17,7 @@ const B = ctx;
 let failed = 0;
 function check(name, fn) {
     try { fn(); console.log("  ok   " + name); }
-    catch (e) { failed++; console.log("  FAIL " + name + "\n         " + e.message); }
+    catch (e) { failed++; console.log("  FAIL " + name + "\\n         " + e.message); }
 }
 const rec = (o) => Object.assign({ id: "x", name: "X", category: "game", runner: "wine", favorite: false, lastLaunched: 0 }, o);
 const names = (list) => list.map((a) => a.name).join(",");
@@ -73,5 +73,59 @@ check("empty and missing lists give an empty list", () => {
     assert.strictEqual(B.select(null, 6).length, 0);
 });
 
-if (failed) { console.log("\n" + failed + " failed"); process.exit(1); }
-console.log("\nall ok");
+console.log("window matching");
+check("desktop-entry ID matches a short WM class", () => {
+    assert.ok(B.matchesWindow(
+        rec({ id: "firefox", name: "Firefox", runner: "native", desktopEntryId: "org.mozilla.firefox" }),
+        { cls: "firefox", title: "Mozilla Firefox" },
+        { id: "org.mozilla.firefox.desktop", name: "Firefox", startupClass: "org.mozilla.firefox" }
+    ));
+});
+check("Wine executable basename matches a Windows WM class", () => {
+    assert.ok(B.matchesWindow(
+        rec({ id: "cyberpunk-2077", name: "Cyberpunk 2077", executable: "/games/Cyberpunk2077.exe" }),
+        { cls: "Cyberpunk2077.exe", title: "Cyberpunk 2077" },
+        null
+    ));
+});
+check("an exact title can identify a window with a generic class", () => {
+    assert.ok(B.matchesWindow(
+        rec({ id: "game", name: "Cyberpunk 2077" }),
+        { cls: "wine", title: "Cyberpunk 2077" },
+        null
+    ));
+});
+check("similar but non-identical titles are not fuzzy-matched", () => {
+    assert.ok(!B.matchesWindow(
+        rec({ id: "doom", name: "Doom" }),
+        { cls: "wine", title: "Doom Eternal" },
+        null
+    ));
+});
+check("missing app/window records do not match", () => {
+    assert.ok(!B.matchesWindow(null, { cls: "firefox" }, null));
+    assert.ok(!B.matchesWindow(rec({}), null, null));
+});
+
+console.log("window activation order");
+const windows = [
+    { address: "0x01", workspace: "1" },
+    { address: "0x02", workspace: "special:minimized" },
+    { address: "0x03", workspace: "2" },
+];
+check("clicking an active app cycles to its next window", () => {
+    assert.strictEqual(B.nextWindow(windows, "0x01"), windows[1]);
+});
+check("an app on another workspace selects a visible window first", () => {
+    assert.strictEqual(B.nextWindow(windows, "0x99"), windows[0]);
+});
+check("all-minimized apps still select a window to restore", () => {
+    const minimized = [{ address: "0x11", workspace: "special:minimized" }];
+    assert.strictEqual(B.nextWindow(minimized, ""), minimized[0]);
+});
+check("an empty window list selects nothing", () => {
+    assert.strictEqual(B.nextWindow([], ""), null);
+});
+
+if (failed) { console.log("\\n" + failed + " failed"); process.exit(1); }
+console.log("\\nall ok");
