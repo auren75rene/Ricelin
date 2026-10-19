@@ -8,7 +8,7 @@ const vm = require("vm");
 const assert = require("assert");
 
 const file = path.join(__dirname, "..", "configs", "quickshell", "pill", "lib", "blades.js");
-const src = fs.readFileSync(file, "utf8").replace(/^\\.pragma.*$/m, "");
+const src = fs.readFileSync(file, "utf8").split("\n").filter(line => !line.startsWith(".pragma")).join("\n");
 const ctx = {};
 vm.createContext(ctx);
 vm.runInContext(src, ctx);
@@ -17,7 +17,7 @@ const B = ctx;
 let failed = 0;
 function check(name, fn) {
     try { fn(); console.log("  ok   " + name); }
-    catch (e) { failed++; console.log("  FAIL " + name + "\\n         " + e.message); }
+    catch (e) { failed++; console.log("  FAIL " + name + "\n         " + e.message); }
 }
 const rec = (o) => Object.assign({ id: "x", name: "X", category: "game", runner: "wine", favorite: false, lastLaunched: 0 }, o);
 const names = (list) => list.map((a) => a.name).join(",");
@@ -127,5 +127,5 @@ check("an empty window list selects nothing", () => {
     assert.strictEqual(B.nextWindow([], ""), null);
 });
 
-if (failed) { console.log("\\n" + failed + " failed"); process.exit(1); }
-console.log("\\nall ok");
+if (failed) { console.log("\n" + failed + " failed"); process.exit(1); }
+console.log("\nall ok");
