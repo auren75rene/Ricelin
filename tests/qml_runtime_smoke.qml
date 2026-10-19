@@ -247,7 +247,12 @@ ShellRoot {
                 }
                 root.bladeSmoke = instance;
                 if (instance.fan.count < 1 || instance.fan.placements.length !== instance.fan.visibleCount) {
-                    root.fail("BladeFan placement mismatch: count=" + instance.fan.count
+                    var firstRegistryApp = AppRegistry.apps.length > 0 ? AppRegistry.apps[0] : null;
+                    root.fail("BladeFan placement mismatch: fanCount=" + instance.fan.count
+                        + ", modelCount=" + instance.fan.model.count
+                        + ", modelApps=" + instance.fan.model.apps.length
+                        + ", registryApps=" + AppRegistry.apps.length
+                        + ", firstApp=" + JSON.stringify(firstRegistryApp)
                         + ", placements=" + (instance.fan.placements ? instance.fan.placements.length : "null")
                         + ", visibleCount=" + instance.fan.visibleCount
                         + ", fit=" + JSON.stringify(instance.fan.layoutFit));
