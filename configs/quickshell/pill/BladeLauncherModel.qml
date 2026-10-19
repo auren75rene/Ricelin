@@ -126,18 +126,18 @@ QtObject {
         var app = root.appAt(index);
         if (!app)
             return "idle";
-        if (root.windowsFor(app).length > 0)
-            return "running";
         if (app.id in root.stoppingIds)
             return "stopping";
+        if (app.id in root.failedIds)
+            return "failed";
+        if (root.windowsFor(app).length > 0)
+            return "running";
         if (app.id in root.launchTargets)
             return "launching";
         if (app.id in root.queuedIds)
             return "waiting";
         if (AppLauncher.isRunning(app.id))
             return "launching";
-        if (app.id in root.failedIds)
-            return "failed";
         return "idle";
     }
 
