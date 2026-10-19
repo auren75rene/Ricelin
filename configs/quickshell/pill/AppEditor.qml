@@ -23,7 +23,8 @@ Item {
 
     required property var app
     property real s: 1
-    readonly property bool canManageWinePrefix: ["wine", "wine-staging", "umu"].indexOf(root.app.runner) >= 0
+    readonly property string effectiveRunner: root.app.runner === "auto" ? RuntimeManager.recommend(root.app).runner : root.app.runner
+    readonly property bool canManageWinePrefix: ["wine", "wine-staging", "umu"].indexOf(root.effectiveRunner) >= 0
 
     signal back()
 
@@ -365,7 +366,9 @@ Item {
         Item { width: 1; height: 10 * root.s }
         SettingsRow {
             name: "Runner"
-            sub: RuntimeManager.runtimeAvailable(root.app.runner) ? "" : RuntimeManager.profileFor(root.app.runner).label + " isn't confirmed installed — this app is already configured to use it, so it stays selectable. Rescan if you've just installed it."
+            sub: root.app.runner === "auto"
+                ? "Auto selects " + RuntimeManager.profileFor(root.effectiveRunner).label + ": " + RuntimeManager.recommend(root.app).reason
+                : (RuntimeManager.runtimeAvailable(root.app.runner) ? "" : RuntimeManager.profileFor(root.app.runner).label + " isn't confirmed installed — this app is already configured to use it, so it stays selectable. Rescan if you've just installed it.")
             last: true
             control: SettingsSeg {
                 s: root.s
@@ -409,11 +412,11 @@ Item {
                     }
                 }
             }
-            TextButton { visible: root.app.runner !== "native"; label: "Open Files"; onClicked: AppLauncher.openPrefixFiles(root.app) }
-            TextButton { visible: root.app.runner !== "native"; label: "Winetricks"; onClicked: AppLauncher.runWinetricks(root.app) }
+            TextButton { visible: root.canManageWinePrefix; label: "Open Files"; onClicked: AppLauncher.openPrefixFiles(root.app) }
+            TextButton { visible: root.canManageWinePrefix; label: "Winetricks"; onClicked: AppLauncher.runWinetricks(root.app) }
         }
         Text {
-            visible: root.app.runner === "steam"
+            visible: root.effectiveRunner === "steam"
             width: parent.width
             wrapMode: Text.WordWrap
             text: "Steam manages its Proton runtime; creation, cloning and resetting are disabled here."
@@ -422,7 +425,7 @@ Item {
             font.pixelSize: 10 * root.s
         }
         Text {
-            visible: root.app.runner === "native"
+            visible: root.effectiveRunner === "native"
             width: parent.width
             wrapMode: Text.WordWrap
             text: "Native Linux apps launch directly; Wine prefix tools are disabled for this runner."
@@ -447,7 +450,7 @@ Item {
             onTriggered: { armed = false; targetPath = ""; }
         }
 
-        Item { width: 1; height: 10 * root.s; visible: root.app.runner === "umu" }
+        Item { width: 1; height: 10 * root.s; visible: root.effectiveRunner === "umu" }
         LabeledField {
             visible: root.app.runner === "umu"
             s: root.s; label: "UMU game ID"; text: root.app.umuId; placeholder: "umu-" + root.app.id
