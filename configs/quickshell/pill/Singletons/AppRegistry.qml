@@ -58,6 +58,7 @@ Singleton {
             category: "game",
             favorite: false,
             blade: "auto",
+            bladeOrder: 0,
             iconImage: "",
             runner: "auto",
             executable: "",
@@ -182,6 +183,12 @@ Singleton {
         var rec = root.normalizeRecord(partial || {});
         rec.id = root.uniqueId(root.slugify(rec.name || rec.executable || "app"));
         rec.createdAt = Date.now();
+        // New entries append to the established blade order. Runtime activity
+        // never changes their order; layout code only changes angles/spacing.
+        var maxBladeOrder = 0;
+        for (var i = 0; i < root.apps.length; ++i)
+            maxBladeOrder = Math.max(maxBladeOrder, Number(root.apps[i].bladeOrder) || 0);
+        rec.bladeOrder = maxBladeOrder + 1;
         root.apps = root.apps.concat([rec]);
         root.persist();
         return rec;
