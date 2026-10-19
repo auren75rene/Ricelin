@@ -205,6 +205,30 @@ function layout(count, maxPerRing) {
     return out;
 }
 
+/** Fit balanced radial rings into a usable screen radius without overlapping capsule bands. */
+function fitLayout(count, maxPerRing, startRadius, maxRadius, requestedLength, gap, minLength) {
+    var n = Math.max(0, Math.floor(Number(count) || 0));
+    var limit = Math.max(2, Math.floor(Number(maxPerRing) || 6));
+    var rings = Math.max(1, Math.ceil(n / limit));
+    var start = Math.max(0, Number(startRadius) || 0);
+    var maximum = Math.max(start + 1, Number(maxRadius) || start + 1);
+    var spacing = Math.max(0, Number(gap) || 0);
+    var minimum = Math.max(1, Number(minLength) || 1);
+    var requested = Math.max(minimum, Number(requestedLength) || minimum);
+    var available = (maximum - start - (rings - 1) * spacing) / rings;
+    var length = Math.min(requested, Math.max(minimum, available));
+    var outer = start + rings * length + (rings - 1) * spacing;
+    return {
+        placements: layout(n, limit),
+        ringCount: rings,
+        bladeLength: length,
+        ringGap: spacing,
+        ringStep: length + spacing,
+        outerRadius: outer,
+        overflows: outer > maximum + 0.001
+    };
+}
+
 /** A regular workspace is eligible only when its name/id is non-special and id is positive when provided. */
 function usableWorkspace(workspace) {
     if (!workspace)
