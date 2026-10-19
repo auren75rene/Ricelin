@@ -15,11 +15,6 @@ QtObject {
     id: root
 
     property string screenName: ""
-    property var queuedIds: ({})
-    property var reservedWorkspaces: ({}) // workspace key -> app ID
-    property var launchTargets: ({})       // app ID -> {workspaceId, workspaceName, monitor, key, startedAt}
-    property var stoppingIds: ({})         // app ID -> request timestamp
-    property var failedIds: ({})           // app ID -> readable failure
     readonly property real queuePollMs: 800
     readonly property real launchTimeoutMs: 90000
     readonly property real stopTimeoutMs: 15000
@@ -127,9 +122,9 @@ QtObject {
         var app = root.appAt(index);
         if (!app)
             return "idle";
-        if (app.id in root.stoppingIds)
+        if (app.id in BladeSession.stoppingIds)
             return "stopping";
-        if (app.id in root.failedIds)
+        if (app.id in BladeSession.failedIds)
             return "failed";
         if (root.windowsFor(app).length > 0)
             return "running";
@@ -139,9 +134,9 @@ QtObject {
             return "setup";
         if (AppLauncher.isPending(app.id))
             return "preparing";
-        if (app.id in root.launchTargets)
+        if (app.id in BladeSession.launchTargets)
             return "launching";
-        if (app.id in root.queuedIds)
+        if (app.id in BladeSession.queuedIds)
             return "waiting";
         if (AppLauncher.isRunning(app.id))
             return "launching";
@@ -182,10 +177,10 @@ QtObject {
 
     function notifyMonitorFallback(app) {
         var configured = root.configuredMonitorFor(app);
-        if (!configured || root.monitorExists(configured) || app.id in root.monitorFallbackNotified)
+        if (!configured || root.monitorExists(configured) || app.id in BladeSession.monitorFallbackNotified)
             return;
         var fallback = root.targetMonitorFor(app);
-        root.monitorFallbackNotified = Object.assign({}, root.monitorFallbackNotified, { [app.id]: true });
+        BladeSession.monitorFallbackNotified = Object.assign({}, BladeSession.monitorFallbackNotified, { [app.id]: true });
         Quickshell.execDetached(["notify-send", "-u", "normal", "-a", "Ricelin",
             "Game monitor unavailable", app.name + " was configured for " + configured
                 + ", which is not connected. Waiting on " + (fallback || "a connected monitor") + " instead."]);
@@ -197,7 +192,7 @@ QtObject {
         return Blades.chooseEmptyWorkspace(
             root.workspaces,
             root.windows,
-            root.reservedWorkspaces,
+            BladeSession.reservedWorkspaces,
             root.targetMonitorFor(app)
         );
     }
@@ -209,15 +204,15 @@ QtObject {
     }
 
     function releaseTarget(appId) {
-        var target = root.launchTargets[appId];
+        var target = BladeSession.launchTargets[appId];
         if (target) {
-            root.reservedWorkspaces = root.clearObjectKey(root.reservedWorkspaces, target.key);
-            root.launchTargets = root.clearObjectKey(root.launchTargets, appId);
+            BladeSession.reservedWorkspaces = root.clearObjectKey(BladeSession.reservedWorkspaces, target.key);
+            BladeSession.launchTargets = root.clearObjectKey(BladeSession.launchTargets, appId);
         }
     }
 
     function failApp(appId, reason) {
-        root.failedIds = Object.assign({}, root.failedIds, { [appId]: String(reason) });
+        BladeSession.failedIds = Object.assign({}, BladeSession.failedIds, { [appId]: String(reason) });
     }
 
     function beginLaunch(app, workspace) {
@@ -225,7 +220,7 @@ QtObject {
             return false;
 
         var key = Blades.workspaceKey(workspace);
-        if (!key || root.reservedWorkspaces[key])
+        if (!key || BladeSession.reservedWorkspaces[key])
             return false;
 
         var target = {
@@ -236,10 +231,10 @@ QtObject {
             startedAt: Date.now()
         };
 
-        root.failedIds = root.clearObjectKey(root.failedIds, app.id);
-        root.queuedIds = root.clearObjectKey(root.queuedIds, app.id);
-        root.reservedWorkspaces = Object.assign({}, root.reservedWorkspaces, { [key]: app.id });
-        root.launchTargets = Object.assign({}, root.launchTargets, { [app.id]: target });
+        BladeSession.failedIds = root.clearObjectKey(BladeSession.failedIds, app.id);
+        BladeSession.queuedIds = root.clearObjectKey(BladeSession.queuedIds, app.id);
+        BladeSession.reservedWorkspaces = Object.assign({}, BladeSession.reservedWorkspaces, { [key]: app.id });
+        BladeSession.launchTargets = Object.assign({}, BladeSession.launchTargets, { [app.id]: target });
 
         // Prefix setup may take several seconds. Keep the workspace reserved
         // but don't focus it until the setup callback, then re-check occupancy
@@ -261,7 +256,7 @@ QtObject {
             // A synchronous preflight deferral has already moved this game back
             // to the queue through onLaunchDeferred; don't mask that state as a
             // launch failure.
-            if (app.id in root.queuedIds)
+            if (app.id in BladeSession.queuedIds)
                 return false;
             if (AppLauncher.isPending(app.id))
                 root.failApp(app.id, "The game launch is already being prepared.");
@@ -304,7 +299,7 @@ QtObject {
                 needsSetup: false,
                 folderMissing: false
             });
-            root.failedIds = root.clearObjectKey(root.failedIds, current.id);
+            BladeSession.failedIds = root.clearObjectKey(BladeSession.failedIds, current.id);
             Quickshell.execDetached(["notify-send", "-u", "normal", "-a", "Ricelin", "Game configured", current.name + " is ready. Click its blade to launch."]);
         }, "Choose the main executable for " + app.name);
     }
@@ -331,26 +326,32 @@ QtObject {
             var target = Blades.nextWindow(existing, activeAddress);
             if (target)
                 Dock.focusWindow(target, root.screenName);
-            root.failedIds = root.clearObjectKey(root.failedIds, app.id);
+            BladeSession.failedIds = root.clearObjectKey(BladeSession.failedIds, app.id);
             return;
         }
 
-        if (app.id in root.queuedIds || app.id in root.launchTargets || AppLauncher.isRunning(app.id))
+        if (app.id in BladeSession.queuedIds || app.id in BladeSession.launchTargets || AppLauncher.isRunning(app.id))
             return;
 
-        root.failedIds = root.clearObjectKey(root.failedIds, app.id);
+        BladeSession.failedIds = root.clearObjectKey(BladeSession.failedIds, app.id);
         root.notifyMonitorFallback(app);
         var workspace = root.emptyWorkspaceFor(app);
         if (!workspace) {
             // Queue intent only. No process, Wine prefix, or Steam launch starts
             // until a usable empty workspace is found.
-            root.queuedIds = Object.assign({}, root.queuedIds, {
+            BladeSession.queuedIds = Object.assign({}, BladeSession.queuedIds, {
                 [app.id]: { requestedAt: Date.now(), monitor: root.targetMonitorFor(app) }
             });
             return;
         }
 
         root.beginLaunch(app, workspace);
+    }
+
+    function markStopping(app, monitor) {
+        BladeSession.stoppingIds = Object.assign({}, BladeSession.stoppingIds, {
+            [app.id]: { requestedAt: Date.now(), monitor: String(monitor || root.targetMonitorFor(app) || "") }
+        });
     }
 
     function stop(index) {
@@ -360,29 +361,26 @@ QtObject {
 
         // Double-clicking a queued game cancels it. It never launches later
         // without the user asking again.
-        if (app.id in root.queuedIds) {
-            root.queuedIds = root.clearObjectKey(root.queuedIds, app.id);
-            root.failedIds = root.clearObjectKey(root.failedIds, app.id);
+        if (app.id in BladeSession.queuedIds) {
+            BladeSession.queuedIds = root.clearObjectKey(BladeSession.queuedIds, app.id);
+            BladeSession.failedIds = root.clearObjectKey(BladeSession.failedIds, app.id);
             return;
         }
 
         // If the prefix preparation process is still running, invalidate the
-        // continuation token. The safe helper may finish preparing the prefix,
-        // but the game will not launch after this cancellation.
+        // continuation token. The safe helper may finish initializing the prefix,
+        // but the game's launch continuation is cancelled.
         if (AppLauncher.isPending(app.id)) {
             AppLauncher.cancelPending(app.id);
             root.releaseTarget(app.id);
-            root.stoppingIds = root.clearObjectKey(root.stoppingIds, app.id);
-            root.failedIds = root.clearObjectKey(root.failedIds, app.id);
+            BladeSession.stoppingIds = root.clearObjectKey(BladeSession.stoppingIds, app.id);
+            BladeSession.failedIds = root.clearObjectKey(BladeSession.failedIds, app.id);
             return;
         }
 
-        // Close game windows politely through Hyprland first. Do not force-kill
-        // a process tree on a double-click; a later explicit force-stop belongs
-        // in the game detail UI after a graceful-close timeout.
         var existing = root.windowsFor(app);
         if (existing.length > 0) {
-            root.stoppingIds = Object.assign({}, root.stoppingIds, { [app.id]: Date.now() });
+            root.markStopping(app, existing[0].monitor || root.targetMonitorFor(app));
             for (var i = 0; i < existing.length; ++i) {
                 var address = Dock.hex(existing[i].address);
                 if (address.length > 0)
@@ -391,31 +389,33 @@ QtObject {
             return;
         }
 
-        if (app.id in root.launchTargets) {
+        if (app.id in BladeSession.launchTargets) {
             if (AppLauncher.isRunning(app.id)) {
-                root.stoppingIds = Object.assign({}, root.stoppingIds, { [app.id]: Date.now() });
+                root.markStopping(app, BladeSession.launchTargets[app.id].monitor);
                 AppLauncher.stop(app.id);
             } else {
                 root.releaseTarget(app.id);
-                root.failedIds = root.clearObjectKey(root.failedIds, app.id);
+                BladeSession.failedIds = root.clearObjectKey(BladeSession.failedIds, app.id);
             }
             return;
         }
 
         if (AppLauncher.isRunning(app.id)) {
-            root.stoppingIds = Object.assign({}, root.stoppingIds, { [app.id]: Date.now() });
+            root.markStopping(app, root.targetMonitorFor(app));
             AppLauncher.stop(app.id);
             return;
         }
 
-        root.failedIds = root.clearObjectKey(root.failedIds, app.id);
+        BladeSession.failedIds = root.clearObjectKey(BladeSession.failedIds, app.id);
     }
 
     function reconcileLaunchTargets() {
-        var ids = Object.keys(root.launchTargets);
+        var ids = Object.keys(BladeSession.launchTargets);
         for (var i = 0; i < ids.length; ++i) {
             var appId = ids[i];
-            var target = root.launchTargets[appId];
+            var target = BladeSession.launchTargets[appId];
+            if (target.monitor && root.screenName && target.monitor !== root.screenName)
+                continue;
             var app = AppRegistry.byId(appId);
             if (!app) {
                 root.releaseTarget(appId);
@@ -435,7 +435,7 @@ QtObject {
                 // Lua-aware dispatch implementation as the rest of Ricelin.
                 Dock.focusWindow(Object.assign({}, w, { workspace: target.workspaceName }), target.monitor);
                 root.releaseTarget(appId);
-                root.stoppingIds = root.clearObjectKey(root.stoppingIds, appId);
+                BladeSession.stoppingIds = root.clearObjectKey(BladeSession.stoppingIds, appId);
                 continue;
             }
 
@@ -449,16 +449,19 @@ QtObject {
     }
 
     function drainQueue() {
-        var ids = Object.keys(root.queuedIds);
+        var ids = Object.keys(BladeSession.queuedIds);
         for (var i = 0; i < ids.length; ++i) {
             var appId = ids[i];
+            var queued = BladeSession.queuedIds[appId];
+            if (queued && queued.monitor && root.screenName && queued.monitor !== root.screenName)
+                continue;
             var app = AppRegistry.byId(appId);
             if (!app) {
-                root.queuedIds = root.clearObjectKey(root.queuedIds, appId);
+                BladeSession.queuedIds = root.clearObjectKey(BladeSession.queuedIds, appId);
                 continue;
             }
-            if (root.windowsFor(app).length > 0 || appId in root.launchTargets || AppLauncher.isRunning(appId)) {
-                root.queuedIds = root.clearObjectKey(root.queuedIds, appId);
+            if (root.windowsFor(app).length > 0 || appId in BladeSession.launchTargets || AppLauncher.isRunning(appId)) {
+                BladeSession.queuedIds = root.clearObjectKey(BladeSession.queuedIds, appId);
                 continue;
             }
             var workspace = root.emptyWorkspaceFor(app);
@@ -471,15 +474,22 @@ QtObject {
     }
 
     function reconcileStops() {
-        var ids = Object.keys(root.stoppingIds);
+        var ids = Object.keys(BladeSession.stoppingIds);
         for (var i = 0; i < ids.length; ++i) {
             var appId = ids[i];
+            var stopState = BladeSession.stoppingIds[appId];
+            if (!stopState)
+                continue;
+            if (stopState.monitor && root.screenName && stopState.monitor !== root.screenName)
+                continue;
+            var requestedAt = typeof stopState === "object"
+                ? Number(stopState.requestedAt || 0) : Number(stopState || 0);
             var app = AppRegistry.byId(appId);
             var stillHasWindow = app && root.windowsFor(app).length > 0;
             if (!stillHasWindow && !AppLauncher.isRunning(appId)) {
-                root.stoppingIds = root.clearObjectKey(root.stoppingIds, appId);
-            } else if (Date.now() - Number(root.stoppingIds[appId] || 0) > root.stopTimeoutMs) {
-                root.stoppingIds = root.clearObjectKey(root.stoppingIds, appId);
+                BladeSession.stoppingIds = root.clearObjectKey(BladeSession.stoppingIds, appId);
+            } else if (Date.now() - requestedAt > root.stopTimeoutMs) {
+                BladeSession.stoppingIds = root.clearObjectKey(BladeSession.stoppingIds, appId);
                 root.failApp(appId, "The game is still running after the close request. Use the game's own exit or a separate force-stop action.");
             }
         }
@@ -490,18 +500,18 @@ QtObject {
         function onLaunchDeferred(appId, message) {
             var id = String(appId);
             root.releaseTarget(id);
-            root.queuedIds = Object.assign({}, root.queuedIds, {
+            BladeSession.queuedIds = Object.assign({}, BladeSession.queuedIds, {
                 [id]: { requestedAt: Date.now(), monitor: root.targetMonitorFor(AppRegistry.byId(id)) }
             });
         }
         function onPreparationFailed(appId, message) {
             root.releaseTarget(String(appId));
-            root.queuedIds = root.clearObjectKey(root.queuedIds, String(appId));
+            BladeSession.queuedIds = root.clearObjectKey(BladeSession.queuedIds, String(appId));
             root.failApp(String(appId), "Prefix preparation failed: " + String(message || "unknown error"));
         }
         function onLaunchFailed(appId, message) {
             root.releaseTarget(String(appId));
-            root.queuedIds = root.clearObjectKey(root.queuedIds, String(appId));
+            BladeSession.queuedIds = root.clearObjectKey(BladeSession.queuedIds, String(appId));
             root.failApp(String(appId), String(message || "The launch exited before it produced a game window."));
         }
     }
@@ -510,9 +520,9 @@ QtObject {
         id: queueWatcher
         interval: root.queuePollMs
         repeat: true
-        running: Object.keys(root.queuedIds).length > 0
-            || Object.keys(root.launchTargets).length > 0
-            || Object.keys(root.stoppingIds).length > 0
+        running: Object.keys(BladeSession.queuedIds).length > 0
+            || Object.keys(BladeSession.launchTargets).length > 0
+            || Object.keys(BladeSession.stoppingIds).length > 0
         onTriggered: {
             Hyprland.refreshWorkspaces();
             Hyprland.refreshToplevels();
