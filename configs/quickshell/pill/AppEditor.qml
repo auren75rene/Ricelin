@@ -459,11 +459,11 @@ Item {
 
         Item { width: 1; height: 10 * root.s; visible: root.effectiveRunner === "umu" }
         LabeledField {
-            visible: root.app.runner === "umu"
+            visible: root.effectiveRunner === "umu"
             s: root.s; label: "UMU game ID"; text: root.app.umuId; placeholder: "umu-" + root.app.id
             onCommitted: (v) => root.patch({ umuId: v })
         }
-        Item { width: 1; height: 10 * root.s; visible: root.app.runner === "umu" }
+        Item { width: 1; height: 10 * root.s; visible: root.effectiveRunner === "umu" }
         SettingsRow {
             visible: root.app.runner === "umu"
             name: "Proton build"
