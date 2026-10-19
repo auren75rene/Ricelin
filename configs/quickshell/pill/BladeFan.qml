@@ -426,6 +426,8 @@ Item {
             }
         }
 
+    }
+
     // Explicit page controls keep every game reachable without shrinking cards
     // until their labels become unreadable. They live just outside the outer ring.
     readonly property real pagerRadius: fan.fanEndRadius + 43 * fan.s
@@ -490,6 +492,5 @@ Item {
         font.family: Theme.font
         font.pixelSize: 10 * fan.s
         font.weight: Font.DemiBold
-    }
     }
 }
