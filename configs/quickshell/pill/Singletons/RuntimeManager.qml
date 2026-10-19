@@ -111,6 +111,15 @@ Singleton {
         if ((api === "d3d9" || api === "d3d11") && root.hasWine)
             return { runner: "wine", protonBuild: "", reason: (api === "d3d9" ? "Direct3D 9" : "Direct3D 11") + " is a reasonable Wine + DXVK starting point." };
 
+        if (String(app && app.category || "").toLowerCase() === "game"
+                && root.hasUmu && root.protonBuilds.length > 0) {
+            return {
+                runner: "umu",
+                protonBuild: root.protonBuilds[0].path || root.protonBuilds[0].name,
+                reason: "Auto prefers the detected UMU + Proton build for this Windows game. If it fails, select another installed runner in the editor."
+            };
+        }
+
         if (root.hasWine)
             return { runner: "wine", protonBuild: "", reason: "No stronger compatibility hint is available; use the installed Wine runtime as the general-purpose default." };
 
