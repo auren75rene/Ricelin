@@ -210,13 +210,27 @@ QtObject {
         root.reservedWorkspaces = Object.assign({}, root.reservedWorkspaces, { [key]: app.id });
         root.launchTargets = Object.assign({}, root.launchTargets, { [app.id]: target });
 
-        // Switching to the already-empty workspace before spawning ensures the
-        // new toplevel naturally starts there; reconciliation moves it by address
-        // if the launcher/window manager places it elsewhere.
-        Hyprland.dispatch('hl.dsp.focus({workspace="' + target.workspaceName + '"})');
-        if (!AppLauncher.launch(app.id, true)) {
+        // Prefix setup may take several seconds. Keep the workspace reserved
+        // but don't focus it until the setup callback, then re-check occupancy
+        // immediately before the game process starts.
+        if (!AppLauncher.launch(app.id, true, function() {
+            Hyprland.refreshWorkspaces();
+            Hyprland.refreshToplevels();
+            var now = root.windows;
+            for (var i = 0; i < now.length; ++i) {
+                var w = now[i];
+                if (Number(w.workspaceId || 0) === target.workspaceId
+                        || String(w.workspace || "") === target.workspaceName)
+                    return false;
+            }
+            Hyprland.dispatch('hl.dsp.focus({workspace="' + target.workspaceName + '"})');
+            return true;
+        })) {
             root.releaseTarget(app.id);
-            root.failApp(app.id, "The selected runner could not start. Check the runtime and launch settings.");
+            if (AppLauncher.isPending(app.id))
+                root.failApp(app.id, "The game launch is already being prepared.");
+            else
+                root.failApp(app.id, "The selected runner could not start. Check the runtime and launch settings.");
             return false;
         }
         return true;
@@ -436,6 +450,13 @@ QtObject {
 
     Connections {
         target: AppLauncher
+        function onLaunchDeferred(appId, message) {
+            var id = String(appId);
+            root.releaseTarget(id);
+            root.queuedIds = Object.assign({}, root.queuedIds, {
+                [id]: { requestedAt: Date.now(), monitor: root.targetMonitorFor(AppRegistry.byId(id)) }
+            });
+        }
         function onPreparationFailed(appId, message) {
             root.releaseTarget(String(appId));
             root.queuedIds = root.clearObjectKey(root.queuedIds, String(appId));
