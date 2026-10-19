@@ -47,18 +47,42 @@ Item {
     readonly property real bladeHeight: 52 * s
 
     readonly property int count: model ? model.count : 0
+    readonly property int maxPerRing: 6
+    readonly property real minimumBladeLength: 64 * s
+    /** Pages contain only as many cards as can fit legibly on this output. */
+    readonly property int maxRingsPerPage: Math.max(1,
+        Math.floor((availableRadius - fanStartRadius + ringGap) / (minimumBladeLength + ringGap)))
+    readonly property int pageCapacity: maxPerRing * maxRingsPerPage
+    readonly property int pageCount: Math.max(1, Math.ceil(count / pageCapacity))
+    property int page: 0
+    readonly property int pageStart: page * pageCapacity
+    readonly property int visibleCount: Math.min(pageCapacity, Math.max(0, count - pageStart))
+
     readonly property var layoutFit: Blades.fitLayout(
-        count, 6, fanStartRadius, availableRadius, 255 * s, ringGap, 64 * s)
+        visibleCount, maxPerRing, fanStartRadius, availableRadius, 255 * s, ringGap, minimumBladeLength)
     readonly property int ringCount: layoutFit.ringCount
     readonly property var placements: layoutFit.placements
     readonly property real bladeLength: layoutFit.bladeLength
     readonly property real ringStep: layoutFit.ringStep
     readonly property real fanEndRadius: layoutFit.outerRadius
-    readonly property real sectorSize: fanEndRadius + 24 * s
+    /** Outer space for page controls and the edge of the glass sector. */
+    readonly property real sectorSize: fanEndRadius + (pageCount > 1 ? 60 : 24) * s
     /** How far from the origin the pointer still counts as "on the fan". */
     readonly property real reach: sectorSize + 30 * s
     /** Size of the square the fan needs: origin offset plus its reach. */
     readonly property real extent: originX + reach
+
+    onPageCountChanged: if (page >= pageCount) page = pageCount - 1
+    onCountChanged: if (page >= pageCount) page = pageCount - 1
+    onAvailableRadiusChanged: if (page >= pageCount) page = pageCount - 1
+
+    function showPage(nextPage) {
+        fan.page = Math.max(0, Math.min(fan.pageCount - 1, Math.floor(Number(nextPage) || 0)));
+    }
+
+    function appIndex(localIndex) {
+        return fan.pageStart + localIndex;
+    }
 
     function placementAt(index) {
         return index >= 0 && index < fan.placements.length ? fan.placements[index] : null;
@@ -182,7 +206,7 @@ Item {
 
     // Guide rays, one per blade.
     Repeater {
-        model: fan.count
+        model: fan.visibleCount
 
         delegate: Rectangle {
             id: ray
@@ -229,15 +253,16 @@ Item {
 
     // The blades.
     Repeater {
-        model: fan.count
+        model: fan.visibleCount
 
         delegate: Item {
             id: blade
             required property int index
+            readonly property int appIndex: fan.appIndex(index)
 
-            readonly property var app: fan.model.appAt(index)
+            readonly property var app: fan.model.appAt(appIndex)
             readonly property var placement: fan.placementAt(index)
-            readonly property string appState: fan.model.stateFor(index)
+            readonly property string appState: fan.model.stateFor(appIndex)
             readonly property real p: fan.bladeProgress(index)
 
             // Every ring unfolds symmetrically from its centre ray.
@@ -319,7 +344,7 @@ Item {
                     Text {
                         width: parent.width
                         text: {
-                            var base = fan.model.labelFor(blade.index);
+                            var base = fan.model.labelFor(blade.appIndex);
                             if (blade.appState === "running")
                                 return base + "  ·  running";
                             if (blade.appState === "preparing")
@@ -380,7 +405,7 @@ Item {
                 interval: 260
                 onTriggered: {
                     blade.tapPending = false;
-                    fan.model.launch(blade.index);
+                    fan.model.launch(blade.appIndex);
                     fan.launched();
                 }
             }
@@ -391,7 +416,7 @@ Item {
                     if (blade.tapPending) {
                         tapDisambiguation.stop();
                         blade.tapPending = false;
-                        fan.model.stop(blade.index);
+                        fan.model.stop(blade.appIndex);
                         fan.launched();
                     } else {
                         blade.tapPending = true;
@@ -400,5 +425,71 @@ Item {
                 }
             }
         }
+
+    // Explicit page controls keep every game reachable without shrinking cards
+    // until their labels become unreadable. They live just outside the outer ring.
+    readonly property real pagerRadius: fan.fanEndRadius + 43 * fan.s
+
+    Rectangle {
+        id: previousPage
+        visible: fan.open && fan.pageCount > 1 && fan.page > 0
+        z: 50000
+        width: 26 * fan.s
+        height: width
+        radius: width / 2
+        x: fan.originX + Math.cos(34 * Math.PI / 180) * fan.pagerRadius - width / 2
+        y: fan.originY + Math.sin(34 * Math.PI / 180) * fan.pagerRadius - height / 2
+        color: Qt.alpha(Theme.cardTop, hoverPrev.hovered ? 0.96 : 0.80)
+        border.width: 1
+        border.color: Theme.hair
+        Text {
+            anchors.centerIn: parent
+            text: "‹"
+            color: Theme.cream
+            font.family: Theme.font
+            font.pixelSize: 19 * fan.s
+            font.weight: Font.DemiBold
+        }
+        HoverHandler { id: hoverPrev; cursorShape: Qt.PointingHandCursor }
+        TapHandler { onTapped: fan.showPage(fan.page - 1) }
+    }
+
+    Rectangle {
+        id: nextPage
+        visible: fan.open && fan.pageCount > 1 && fan.page < fan.pageCount - 1
+        z: 50000
+        width: 26 * fan.s
+        height: width
+        radius: width / 2
+        x: fan.originX + Math.cos(52 * Math.PI / 180) * fan.pagerRadius - width / 2
+        y: fan.originY + Math.sin(52 * Math.PI / 180) * fan.pagerRadius - height / 2
+        color: Qt.alpha(Theme.cardTop, hoverNext.hovered ? 0.96 : 0.80)
+        border.width: 1
+        border.color: Theme.hair
+        Text {
+            anchors.centerIn: parent
+            text: "›"
+            color: Theme.cream
+            font.family: Theme.font
+            font.pixelSize: 19 * fan.s
+            font.weight: Font.DemiBold
+        }
+        HoverHandler { id: hoverNext; cursorShape: Qt.PointingHandCursor }
+        TapHandler { onTapped: fan.showPage(fan.page + 1) }
+    }
+
+    Text {
+        visible: fan.open && fan.pageCount > 1
+        z: 50000
+        x: fan.originX + Math.cos(43 * Math.PI / 180) * fan.pagerRadius - width / 2
+        y: fan.originY + Math.sin(43 * Math.PI / 180) * fan.pagerRadius - height / 2
+        width: 44 * fan.s
+        horizontalAlignment: Text.AlignHCenter
+        text: (fan.page + 1) + " / " + fan.pageCount
+        color: Theme.cream
+        font.family: Theme.font
+        font.pixelSize: 10 * fan.s
+        font.weight: Font.DemiBold
+    }
     }
 }
