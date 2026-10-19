@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Shapes
 import "Singletons"
+import "lib/blades.js" as Blades
 
 /**
  * The blade fan: a quarter-circle of guide rays and arcs growing out of the
@@ -39,16 +40,25 @@ Item {
     readonly property real originX: 24 * s
     readonly property real originY: 24 * s
     readonly property real beadSize: 44 * s
-    readonly property real sectorSize: 540 * s
     readonly property real fanStartRadius: 250 * s
-    readonly property real fanEndRadius: 505 * s
+    readonly property real bladeLength: 255 * s
+    /** Rings are kept far enough apart that blades on neighboring arcs cannot collide. */
+    readonly property real ringStep: 68 * s
     readonly property real bladeHeight: 52 * s
+
+    readonly property int count: model ? model.count : 0
+    readonly property int ringCount: Math.max(1, Math.ceil(count / 6))
+    readonly property var placements: Blades.layout(count, 6)
+    readonly property real fanEndRadius: fanStartRadius + bladeLength + (ringCount - 1) * ringStep
+    readonly property real sectorSize: fanEndRadius + 24 * s
     /** How far from the origin the pointer still counts as "on the fan". */
     readonly property real reach: sectorSize + 30 * s
     /** Size of the square the fan needs: origin offset plus its reach. */
     readonly property real extent: originX + reach
 
-    readonly property int count: model ? model.count : 0
+    function placementAt(index) {
+        return index >= 0 && index < fan.placements.length ? fan.placements[index] : null;
+    }
 
     property real progress: open ? 1 : 0
     Behavior on progress {
@@ -60,13 +70,17 @@ Item {
     }
 
     function fanAngle(index) {
-        return count <= 1 ? 43 : 8 + 70 * index / (count - 1);
+        var p = fan.placementAt(index);
+        return p ? p.angle : 43;
     }
 
-    /** Per-blade progress: later blades start slightly after earlier ones, so the fan unfolds instead of popping. */
+    /** Stagger each balanced ring independently; the delay remains bounded for any number of games. */
     function bladeProgress(index) {
-        var lag = count > 1 ? 0.08 : 0;
-        return Math.max(0, Math.min(1, (progress - lag * index) / (1 - lag * (count - 1))));
+        var p = fan.placementAt(index);
+        if (!p || p.ringSize <= 1)
+            return progress;
+        var lag = Math.min(0.07, 0.5 / (p.ringSize - 1));
+        return Math.max(0, Math.min(1, (progress - lag * p.slot) / (1 - lag * (p.ringSize - 1))));
     }
 
     // Liquid-glass lens behind the fan. Its tint stays deliberately faint so
@@ -131,12 +145,12 @@ Item {
 
     // Concentric guide arcs.
     Repeater {
-        model: [150, 250, 350, 450, 520]
+        model: Math.max(5, Math.ceil((fan.fanEndRadius / fan.s - 150) / 100) + 1)
 
         delegate: Shape {
             id: arc
-            required property real modelData
-            readonly property real r: modelData * fan.s
+            required property int index
+            readonly property real r: (150 + 100 * index) * fan.s
 
             x: fan.originX - r
             y: fan.originY - r
@@ -218,17 +232,18 @@ Item {
             required property int index
 
             readonly property var app: fan.model.appAt(index)
+            readonly property var placement: fan.placementAt(index)
             readonly property string appState: fan.model.stateFor(index)
             readonly property real p: fan.bladeProgress(index)
 
-            // Angle of this blade right now: it starts lying along the first ray and
-            // swings out to its own as the fan opens, pivoting about the origin.
-            readonly property real theta: fan.fanAngle(0) + (fan.fanAngle(index) - fan.fanAngle(0)) * p
+            // Every ring unfolds symmetrically from its centre ray.
+            readonly property real theta: 43 + (fan.fanAngle(index) - 43) * p
+            readonly property real startRadius: fan.fanStartRadius + (placement ? placement.ring * fan.ringStep : 0)
 
-            width: fan.fanEndRadius - fan.fanStartRadius
+            width: fan.bladeLength
             height: fan.bladeHeight
-            x: fan.originX + Math.cos(theta * Math.PI / 180) * fan.fanStartRadius
-            y: fan.originY + Math.sin(theta * Math.PI / 180) * fan.fanStartRadius - height / 2
+            x: fan.originX + Math.cos(theta * Math.PI / 180) * startRadius
+            y: fan.originY + Math.sin(theta * Math.PI / 180) * startRadius - height / 2
             z: 100 + index
             visible: p > 0.002
             opacity: p
@@ -339,11 +354,32 @@ Item {
                 cursorShape: Qt.PointingHandCursor
             }
 
+            property bool tapPending: false
+
+            // Delay single-click activation briefly so a double click has one
+            // unambiguous meaning: stop (or cancel a queued launch).
+            Timer {
+                id: tapDisambiguation
+                interval: 260
+                onTriggered: {
+                    blade.tapPending = false;
+                    fan.model.launch(blade.index);
+                    fan.launched();
+                }
+            }
+
             TapHandler {
                 id: tap
                 onTapped: {
-                    fan.model.launch(blade.index);
-                    fan.launched();
+                    if (blade.tapPending) {
+                        tapDisambiguation.stop();
+                        blade.tapPending = false;
+                        fan.model.stop(blade.index);
+                        fan.launched();
+                    } else {
+                        blade.tapPending = true;
+                        tapDisambiguation.restart();
+                    }
                 }
             }
         }
