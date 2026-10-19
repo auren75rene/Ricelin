@@ -1,8 +1,8 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import "Singletons"
-import "lib/desktopentry.js" as DesktopImport
+import "Pill/Singletons"
+import "Pill/lib/desktopentry.js" as DesktopImport
 import "Pill" as Pill
 
 ShellRoot {
