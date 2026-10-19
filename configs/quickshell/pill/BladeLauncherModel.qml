@@ -186,8 +186,6 @@ QtObject {
                 + ", which is not connected. Waiting on " + (fallback || "a connected monitor") + " instead."]);
     }
 
-    property var monitorFallbackNotified: ({})
-
     function emptyWorkspaceFor(app) {
         return Blades.chooseEmptyWorkspace(
             root.workspaces,
@@ -516,13 +514,29 @@ QtObject {
         }
     }
 
+    function hasOwnedPendingWork() {
+        var queues = BladeSession.queuedIds;
+        for (var q in queues)
+            if (!queues[q].monitor || !root.screenName || queues[q].monitor === root.screenName)
+                return true;
+
+        var targets = BladeSession.launchTargets;
+        for (var t in targets)
+            if (!targets[t].monitor || !root.screenName || targets[t].monitor === root.screenName)
+                return true;
+
+        var stops = BladeSession.stoppingIds;
+        for (var s in stops)
+            if (!stops[s].monitor || !root.screenName || stops[s].monitor === root.screenName)
+                return true;
+        return false;
+    }
+
     Timer {
         id: queueWatcher
         interval: root.queuePollMs
         repeat: true
-        running: Object.keys(BladeSession.queuedIds).length > 0
-            || Object.keys(BladeSession.launchTargets).length > 0
-            || Object.keys(BladeSession.stoppingIds).length > 0
+        running: root.hasOwnedPendingWork()
         onTriggered: {
             Hyprland.refreshWorkspaces();
             Hyprland.refreshToplevels();
