@@ -227,6 +227,11 @@ QtObject {
             return true;
         })) {
             root.releaseTarget(app.id);
+            // A synchronous preflight deferral has already moved this game back
+            // to the queue through onLaunchDeferred; don't mask that state as a
+            // launch failure.
+            if (app.id in root.queuedIds)
+                return false;
             if (AppLauncher.isPending(app.id))
                 root.failApp(app.id, "The game launch is already being prepared.");
             else
