@@ -59,7 +59,7 @@ Singleton {
             favorite: false,
             blade: "auto",
             iconImage: "",
-            runner: "wine",
+            runner: "auto",
             executable: "",
             desktopEntryId: "",
             workingDirectory: "",
