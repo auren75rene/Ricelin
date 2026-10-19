@@ -14,6 +14,31 @@ ShellRoot {
     property bool prefixEnsureDone: false
     property string prefixEnsureError: ""
     property bool gameScanChecked: false
+    property var bladeSmoke: null
+
+    Component {
+        id: bladeSmokeComponent
+        Item {
+            id: bladeSmokeRoot
+            width: 1200
+            height: 1200
+            visible: false
+            property alias fan: smokeFan
+            Pill.BladeLauncherModel {
+                id: smokeModel
+                screenName: ""
+            }
+            Pill.BladeFan {
+                id: smokeFan
+                width: 1200
+                height: 1200
+                model: smokeModel
+                s: 1
+                availableRadius: 900
+                open: false
+            }
+        }
+    }
 
     Component {
         id: addStyleFormComponent
@@ -182,6 +207,20 @@ ShellRoot {
                     return
                 }
                 root.gameScanChecked = true
+
+                // Compile and create the actual fan/model offscreen so CI covers
+                // the balanced-layout QML, not just its pure JavaScript geometry.
+                var instance = bladeSmokeComponent.createObject(null);
+                if (!instance || !instance.fan) {
+                    if (instance) instance.destroy();
+                    root.fail("BladeFan could not be instantiated in the headless runtime");
+                    return;
+                }
+                root.bladeSmoke = instance;
+                if (instance.fan.count < 1 || instance.fan.placements.length !== instance.fan.count) {
+                    root.fail("BladeFan did not produce one placement per discovered game");
+                    return;
+                }
             }
 
             var desktopExecutable = Quickshell.env("RICELIN_TEST_DESKTOP_EXECUTABLE") || ""
