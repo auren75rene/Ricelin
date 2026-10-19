@@ -92,9 +92,15 @@ Singleton {
     function recommend(app) {
         var api = String(app && app.graphicsApi ? app.graphicsApi : "unknown").toLowerCase();
         var steamId = String(app && app.steamAppId ? app.steamAppId : "").trim();
+        var executable = String(app && app.executable ? app.executable : "").toLowerCase();
+        var desktopEntryId = String(app && app.desktopEntryId ? app.desktopEntryId : "").trim();
+        var windowsTarget = /\\.(exe|msi|bat|cmd)$/i.test(executable);
 
         if (steamId.length > 0 && root.hasSteam)
             return { runner: "steam", protonBuild: "", reason: "A Steam App ID is configured; launch through Steam so it can use its managed compatibility prefix." };
+
+        if (!windowsTarget && (executable.length > 0 || desktopEntryId.length > 0))
+            return { runner: "native", protonBuild: "", reason: "The configured target is a native executable or desktop entry, so no Wine prefix is needed." };
 
         if (api === "d3d12" && root.hasUmu && root.protonBuilds.length > 0)
             return { runner: "umu", protonBuild: root.protonBuilds[0].path || root.protonBuilds[0].name, reason: "Direct3D 12 is a strong signal for UMU + Proton/VKD3D-Proton." };
