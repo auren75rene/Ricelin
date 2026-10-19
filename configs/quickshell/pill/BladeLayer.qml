@@ -68,7 +68,10 @@ PanelWindow {
         shape: RegionShape.Ellipse
     }
 
-    BladeLauncherModel { id: bladeModel }
+    BladeLauncherModel {
+        id: bladeModel
+        screenName: root.modelData ? root.modelData.name : ""
+    }
 
     function collapse() {
         root.pinned = false;
