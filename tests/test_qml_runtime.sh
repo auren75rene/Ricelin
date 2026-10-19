@@ -63,9 +63,9 @@ install -m 755 "$repo/configs/hypr/scripts/ricelin-games-scan" "$config/hypr/scr
 install -m 755 "$repo/configs/hypr/scripts/ricelin-style" "$home/.config/hypr/scripts/ricelin-style"
 install -m 755 "$repo/configs/hypr/scripts/qs-toggle.sh" "$home/.config/hypr/scripts/qs-toggle.sh"
 install -m 644 "$here/qml_runtime_smoke.qml" "$qml_dir/qml_runtime_smoke.qml"
-# Mirror the production layout so relative imports from Singletons resolve.
-ln -s "$repo/configs/quickshell/pill/Singletons" "$qml_dir/Singletons"
-ln -s "$repo/configs/quickshell/pill/lib" "$qml_dir/lib"
+# Mirror the production layout under a single canonical Pill import path.
+# The smoke test imports Pill/Singletons and Pill/lib just like production
+# components do, so QML caches one shared instance of each singleton.
 ln -s "$repo/configs/quickshell/pill" "$qml_dir/Pill"
 
 env \
