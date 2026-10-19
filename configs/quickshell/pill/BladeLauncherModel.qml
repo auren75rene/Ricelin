@@ -97,21 +97,22 @@ QtObject {
         return out;
     }
 
-    /** Every eligible registry entry is included; geometry is handled by BladeFan's balanced rings. */
+    /** Every game, including a folder that still needs a launch target, gets a blade. */
     readonly property var apps: {
         var picked = Blades.select(AppRegistry.apps, 0);
         var out = [];
         for (var i = 0; i < picked.length; ++i) {
             var app = picked[i];
+            if (app.needsSetup || app.folderMissing || !app.executable) {
+                out.push(app);
+                continue;
+            }
             if (AppLauncher.effectiveRunnerFor(app) !== "native") {
                 out.push(app);
                 continue;
             }
             var entry = root.desktopFor(app);
-            if (entry)
-                out.push(Object.assign({}, app, { desktopEntry: entry }));
-            else if (app.executable)
-                out.push(app);
+            out.push(entry ? Object.assign({}, app, { desktopEntry: entry }) : app);
         }
         return out;
     }
@@ -215,10 +216,56 @@ QtObject {
         return true;
     }
 
+    function configure(index) {
+        var app = root.appAt(index);
+        if (!app)
+            return;
+        if (app.folderMissing) {
+            root.failApp(app.id, "The game folder is missing. Restore it or update the Games directory, then rescan.");
+            Quickshell.execDetached(["notify-send", "-u", "normal", "-a", "Ricelin", "Game folder missing", app.name]);
+            return;
+        }
+        // Discovery is read-only and never executes guessed targets. A folder
+        // with an ambiguous/no executable asks the user to choose the real one.
+        AppLauncher.pickFile(function(path) {
+            if (!path || String(path).length === 0)
+                return;
+            var current = AppRegistry.byId(app.id);
+            if (!current)
+                return;
+            var selected = String(path);
+            var effectiveRunner = current.runner === "auto"
+                ? RuntimeManager.recommend(Object.assign({}, current, { executable: selected })).runner
+                : current.runner;
+            var prefix = String(current.prefix || "");
+            if (/\\.exe$/i.test(selected) && ["wine", "wine-staging", "umu"].indexOf(effectiveRunner) >= 0
+                    && prefix.length === 0)
+                prefix = AppRegistry.dataHome + "/ricelin/prefixes/" + current.id;
+            AppRegistry.update(current.id, {
+                executable: selected,
+                workingDirectory: selected.slice(0, selected.lastIndexOf("/")) || current.gameFolder,
+                prefix: prefix,
+                needsSetup: false,
+                folderMissing: false
+            });
+            root.failedIds = root.clearObjectKey(root.failedIds, current.id);
+            Quickshell.execDetached(["notify-send", "-u", "normal", "-a", "Ricelin", "Game configured", current.name + " is ready. Click its blade to launch."]);
+        }, "Choose the main executable for " + app.name);
+    }
+
     function launch(index) {
         var app = root.appAt(index);
         if (!app)
             return;
+
+        if (app.folderMissing) {
+            root.configure(index);
+            return;
+        }
+        if (app.needsSetup || !app.executable) {
+            root.configure(index);
+            return;
+        }
 
         // Existing windows are navigation targets, never a reason to spawn a duplicate.
         var existing = root.windowsFor(app);
