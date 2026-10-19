@@ -133,6 +133,12 @@ QtObject {
             return "failed";
         if (root.windowsFor(app).length > 0)
             return "running";
+        if (app.folderMissing)
+            return "missing";
+        if (app.needsSetup || !app.executable)
+            return "setup";
+        if (AppLauncher.isPending(app.id))
+            return "preparing";
         if (app.id in root.launchTargets)
             return "launching";
         if (app.id in root.queuedIds)
