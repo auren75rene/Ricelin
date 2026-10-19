@@ -206,9 +206,16 @@ Singleton {
         return rec;
     }
 
+    function withoutTrailingSlashes(value) {
+        var path = String(value || "");
+        while (path.length > 1 && path.charAt(path.length - 1) === "/")
+            path = path.slice(0, -1);
+        return path;
+    }
+
     function pathWithin(child, parent) {
-        var c = String(child || "").replace(/\\/+$/, "");
-        var p = String(parent || "").replace(/\\/+$/, "");
+        var c = root.withoutTrailingSlashes(child);
+        var p = root.withoutTrailingSlashes(parent);
         return c.length > 0 && p.length > 0 && (c === p || c.indexOf(p + "/") === 0);
     }
 
