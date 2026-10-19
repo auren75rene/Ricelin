@@ -570,10 +570,19 @@ Singleton {
         }
 
         var needsOrderMigration = false;
-        root.apps = records.map((a, index) => {
+        var maxSavedOrder = 0;
+        for (var oi = 0; oi < records.length; ++oi) {
+            var savedOrder = Number(records[oi] && records[oi].bladeOrder);
+            if (isFinite(savedOrder) && savedOrder > maxSavedOrder)
+                maxSavedOrder = savedOrder;
+        }
+        root.apps = records.map((a) => {
             var rec = root.normalizeRecord(a);
             if (!isFinite(Number(a && a.bladeOrder)) || Number(a && a.bladeOrder) <= 0) {
-                rec.bladeOrder = (index + 1) * 10;
+                // Legacy entries keep their serialized order and are appended
+                // after any entries that already have an explicit stable order.
+                maxSavedOrder += 10;
+                rec.bladeOrder = maxSavedOrder;
                 needsOrderMigration = true;
             }
             return rec;
