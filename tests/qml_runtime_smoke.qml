@@ -247,7 +247,10 @@ ShellRoot {
                 }
                 root.bladeSmoke = instance;
                 if (instance.fan.count < 1 || instance.fan.placements.length !== instance.fan.count) {
-                    root.fail("BladeFan did not produce one placement per discovered game");
+                    root.fail("BladeFan placement mismatch: count=" + instance.fan.count
+                        + ", placements=" + (instance.fan.placements ? instance.fan.placements.length : "null")
+                        + ", visibleCount=" + instance.fan.visibleCount
+                        + ", fit=" + JSON.stringify(instance.fan.layoutFit));
                     return;
                 }
                 if (instance.pagingFan.count !== 60
