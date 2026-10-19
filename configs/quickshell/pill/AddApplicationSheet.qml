@@ -25,7 +25,7 @@ Item {
 
     property string name: ""
     property string category: "game"
-    property string runner: "wine"
+    property string runner: "auto"
     property string executable: ""
     property string workingDirectory: ""
     property string prefix: ""
@@ -35,8 +35,15 @@ Item {
 
     readonly property bool canAdd: root.name.trim().length > 0 && root.executable.trim().length > 0
 
-    function toFolderName(n) {
-        return String(n).replace(/[^A-Za-z0-9]/g, "");
+    function dataHome() {
+        return Quickshell.env("XDG_DATA_HOME") || ((Quickshell.env("HOME") || "") + "/.local/share");
+    }
+
+    // Prefixes must live outside the game installation tree. ricelin-prefix
+    // intentionally refuses a prefix that overlaps the executable/workdir.
+    function defaultPrefixPath(n) {
+        var id = AppRegistry.uniqueId(AppRegistry.slugify(String(n || "game")));
+        return root.dataHome() + "/ricelin/prefixes/" + id;
     }
 
     function baseName(p) {
@@ -61,7 +68,7 @@ Item {
         if (root.workingDirectory.length === 0)
             root.workingDirectory = root.dirOf(p);
         if (!root.prefixTouched && root.name.length > 0)
-            root.prefix = (Quickshell.env("HOME") || "") + "/Games/" + root.toFolderName(root.name) + "/prefix";
+            root.prefix = root.defaultPrefixPath(root.name);
         root.applyingExecutablePick = false;
     }
 
@@ -153,7 +160,14 @@ Item {
             label: "Name"
             text: root.name
             placeholder: "How it appears in Ricelin"
-            onTextChanged: { root.name = text; if (!root.applyingExecutablePick && text.length > 0) root.nameTouched = true; }
+            onTextChanged: {
+                root.name = text;
+                if (!root.applyingExecutablePick && text.length > 0) {
+                    root.nameTouched = true;
+                    if (!root.prefixTouched)
+                        root.prefix = root.defaultPrefixPath(text);
+                }
+            }
         }
         Item { width: 1; height: 10 * root.s }
 
@@ -169,12 +183,12 @@ Item {
         }
         SettingsRow {
             name: "Runner"
-            sub: root.runner === "umu" && !RuntimeManager.hasUmu ? "UMU wasn't detected on this system yet"
-                : (root.runner !== "umu" && !RuntimeManager.hasWine ? "Wine wasn't detected on this system yet" : "")
+            sub: root.runner === "auto" ? RuntimeManager.recommend({ graphicsApi: "unknown" }).reason
+                : (!RuntimeManager.runtimeAvailable(root.runner) ? RuntimeManager.profileFor(root.runner).label + " isn't detected on this system yet" : "")
             last: true
             control: SettingsSeg {
                 s: root.s
-                options: [ { label: "Wine", value: "wine" }, { label: "Staging", value: "wine-staging" }, { label: "UMU", value: "umu" }, { label: "Native", value: "native" } ]
+                options: [ { label: "Auto", value: "auto" }, { label: "Wine", value: "wine" }, { label: "Staging", value: "wine-staging" }, { label: "UMU", value: "umu" }, { label: "Steam", value: "steam" }, { label: "Native", value: "native" } ]
                 value: root.runner
                 onPicked: (v) => root.runner = v
             }
