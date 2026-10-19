@@ -137,7 +137,12 @@ function eligible(app) {
     return lower(app.category) === "game" || AUTO_RUNNERS.indexOf(lower(app.runner)) >= 0;
 }
 
-/** Pinned first, then favorites, then the most recently launched, then A to Z. */
+/**
+ * Stable ordering: explicit pin/favourite priority is preserved, but merely
+ * launching a game no longer reshuffles the fan. Existing bladeOrder wins;
+ * legacy records fall back to createdAt and then their name for deterministic
+ * migration from the older registry schema.
+ */
 function compare(a, b) {
     var ap = mode(a) === "pin" ? 1 : 0;
     var bp = mode(b) === "pin" ? 1 : 0;
@@ -149,14 +154,118 @@ function compare(a, b) {
     if (af !== bf)
         return bf - af;
 
-    var at = Number(a.lastLaunched || 0);
-    var bt = Number(b.lastLaunched || 0);
-    if (at !== bt)
-        return bt - at;
+    var ao = Number(a.bladeOrder);
+    var bo = Number(b.bladeOrder);
+    if (isFinite(ao) && isFinite(bo) && ao !== bo)
+        return ao - bo;
+
+    var ac = Number(a.createdAt || 0);
+    var bc = Number(b.createdAt || 0);
+    if (ac !== bc)
+        return ac - bc;
 
     var an = lower(a.name);
     var bn = lower(b.name);
     return an < bn ? -1 : (an > bn ? 1 : 0);
+}
+
+/**
+ * Balance all apps across concentric blade rings. Each ring is capped at
+ * maxPerRing so adjacent capsules retain enough angular separation to avoid
+ * collisions. The number of entries per ring differs by at most one.
+ *
+ * Output is an array of {index, ring, ringSize, slot, angle}; index remains
+ * aligned with the stable app order supplied by the caller.
+ */
+function layout(count, maxPerRing) {
+    var n = Math.max(0, Math.floor(Number(count) || 0));
+    var limit = Math.max(2, Math.floor(Number(maxPerRing) || 6));
+    if (n === 0)
+        return [];
+
+    var rings = Math.ceil(n / limit);
+    var base = Math.floor(n / rings);
+    var extra = n % rings;
+    var out = [];
+    var index = 0;
+
+    for (var ring = 0; ring < rings; ++ring) {
+        var size = base + (ring < extra ? 1 : 0);
+        for (var slot = 0; slot < size; ++slot) {
+            out.push({
+                index: index++,
+                ring: ring,
+                ringCount: rings,
+                ringSize: size,
+                slot: slot,
+                angle: size <= 1 ? 43 : 8 + 70 * slot / (size - 1)
+            });
+        }
+    }
+    return out;
+}
+
+/** A regular workspace is eligible only when its name/id is non-special and id is positive when provided. */
+function usableWorkspace(workspace) {
+    if (!workspace)
+        return false;
+    var name = String(workspace.name === undefined ? "" : workspace.name);
+    if (name.toLowerCase().indexOf("special:") === 0)
+        return false;
+    if (workspace.id !== undefined && workspace.id !== null && Number(workspace.id) <= 0)
+        return false;
+    return name.length > 0 || Number(workspace.id) > 0;
+}
+
+function workspaceKey(workspace) {
+    if (!workspace)
+        return "";
+    if (workspace.id !== undefined && workspace.id !== null && Number(workspace.id) > 0)
+        return String(Number(workspace.id));
+    return String(workspace.name || "");
+}
+
+/**
+ * Choose a genuinely empty regular workspace on the requested monitor.
+ * Occupancy and reservations are keyed by workspace name or id. No workspace
+ * is created here; null means the caller must wait rather than launch.
+ */
+function chooseEmptyWorkspace(workspaces, windows, reservations, monitorName) {
+    var occupied = {};
+    var reserved = reservations || {};
+    var list = workspaces || [];
+    var wins = windows || [];
+
+    for (var i = 0; i < wins.length; ++i) {
+        var w = wins[i];
+        if (!w)
+            continue;
+        var key = String(w.workspaceId && Number(w.workspaceId) > 0 ? Number(w.workspaceId) : (w.workspace || ""));
+        if (key.length > 0)
+            occupied[key] = true;
+    }
+
+    var candidates = [];
+    for (var j = 0; j < list.length; ++j) {
+        var ws = list[j];
+        if (!usableWorkspace(ws))
+            continue;
+        if (monitorName && monitorName.length > 0 && String(ws.monitor || "") !== monitorName)
+            continue;
+        var key = workspaceKey(ws);
+        if (!key || occupied[key] || reserved[key])
+            continue;
+        candidates.push(ws);
+    }
+
+    candidates.sort(function(a, b) {
+        var ai = Number(a.id || 0);
+        var bi = Number(b.id || 0);
+        if (ai && bi && ai !== bi)
+            return ai - bi;
+        return String(a.name || "").localeCompare(String(b.name || ""));
+    });
+    return candidates.length > 0 ? candidates[0] : null;
 }
 
 /** At most `max` eligible records in blade order; `max` <= 0 means no cap. */
