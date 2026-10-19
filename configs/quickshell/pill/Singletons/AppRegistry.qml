@@ -32,6 +32,9 @@ Singleton {
     property bool recoveryWritePending: false
     property string recoveryBackupPath: ""
     property string recoveryStatus: ""
+    // Do not scan/write discovered games until first-run defaults or legacy
+    // registry migration has completed its atomic save.
+    property bool scanAfterSeed: false
 
     readonly property string configHome: Quickshell.env("XDG_CONFIG_HOME") || ((Quickshell.env("HOME") || "") + "/.config")
     readonly property string dataHome: Quickshell.env("XDG_DATA_HOME") || ((Quickshell.env("HOME") || "") + "/.local/share")
@@ -444,12 +447,16 @@ Singleton {
                 root.recoveryStatus = "Original registry backed up to " + root.recoveryBackupPath
                     + ". Defaults were written; the original file contents remain in that backup.";
                 root.scanGames();
+            } else if (root.scanAfterSeed) {
+                root.scanAfterSeed = false;
+                root.scanGames();
             } else if (root.recoveryStatus.indexOf("Could not save applications.json:") === 0) {
                 root.recoveryStatus = "";
             }
         }
         onSaveFailed: function(error) {
             if (!root.recoveryWritePending) {
+                root.scanAfterSeed = false;
                 root.recoveryStatus = "Could not save applications.json: " + String(error);
                 console.warn("AppRegistry: could not save applications.json:", error);
                 return;
@@ -530,8 +537,8 @@ Singleton {
         if (pathState === 1) {
             root.loadError = "";
             root.ready = true;
+            root.scanAfterSeed = true;
             root.seedDefaults();
-            root.scanGames();
             return;
         }
         if (pathState !== 0) {
@@ -559,10 +566,23 @@ Singleton {
             return;
         }
 
-        root.apps = records.map(a => root.normalizeRecord(a));
+        var needsOrderMigration = false;
+        root.apps = records.map((a, index) => {
+            var rec = root.normalizeRecord(a);
+            if (!isFinite(Number(a && a.bladeOrder)) || Number(a && a.bladeOrder) <= 0) {
+                rec.bladeOrder = (index + 1) * 10;
+                needsOrderMigration = true;
+            }
+            return rec;
+        });
         root.loadError = "";
         root.ready = true;
-        root.scanGames();
+        if (needsOrderMigration) {
+            root.scanAfterSeed = true;
+            root.persist();
+        } else {
+            root.scanGames();
+        }
     }
 
     // This recovery path is deliberately explicit: it backs up the exact old
