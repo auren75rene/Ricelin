@@ -34,7 +34,12 @@ Singleton {
     /** appId -> live Process, kept outside runningIds since UI never binds to the process object itself. */
     property var _procs: ({})
     property var _stopRequested: ({})
+    property var pendingStarts: ({}) // appId -> token while prefix preparation is in flight
+    property int nextStartToken: 0
     property int _runningGameCount: 0
+
+    signal preparationFailed(string appId, string message)
+    signal launchFailed(string appId, string message)
 
     function isRunning(appId) {
         return appId in root.runningIds;
@@ -48,6 +53,30 @@ Singleton {
     function startedAt(appId) {
         var r = root.runningIds[appId];
         return r ? r.startedAt : 0;
+    }
+
+    function isPending(appId) {
+        return appId in root.pendingStarts;
+    }
+
+    function cancelPending(appId) {
+        if (!(appId in root.pendingStarts))
+            return false;
+        var next = Object.assign({}, root.pendingStarts);
+        delete next[appId];
+        root.pendingStarts = next;
+        // The safety helper is allowed to finish initializing its staged prefix,
+        // but the stale callback is ignored and never starts the game.
+        return true;
+    }
+
+    function clearPending(appId, token) {
+        if (root.pendingStarts[appId] !== token)
+            return false;
+        var next = Object.assign({}, root.pendingStarts);
+        delete next[appId];
+        root.pendingStarts = next;
+        return true;
     }
 
     function dllOverrideString(overrides) {
@@ -74,17 +103,27 @@ Singleton {
         return DesktopImport.findEntry(DesktopEntries.applications.values || [], app);
     }
 
-    /** Resolve Auto once for execution; preserve the user's configured runner in the registry. */
+    /**
+     * Resolve Auto once for execution; the stored runner remains "auto".
+     * Any effective Wine-family runner receives a dedicated per-game prefix if
+     * an older/manual registry entry didn't have one yet.
+     */
     function effectiveRecord(app) {
         var normalized = AppRegistry.normalizeRecord(app);
-        if (normalized.runner !== "auto")
-            return normalized;
-        var recommendation = RuntimeManager.recommend(normalized);
-        return Object.assign({}, normalized, {
-            runner: recommendation.runner,
-            protonBuild: recommendation.protonBuild || normalized.protonBuild,
-            runnerReason: recommendation.reason
-        });
+        var effective = normalized;
+        if (normalized.runner === "auto") {
+            var recommendation = RuntimeManager.recommend(normalized);
+            effective = Object.assign({}, normalized, {
+                runner: recommendation.runner,
+                protonBuild: recommendation.protonBuild || normalized.protonBuild,
+                runnerReason: recommendation.reason
+            });
+        }
+        if (["wine", "wine-staging", "umu"].indexOf(effective.runner) >= 0
+                && !String(effective.prefix || "")) {
+            effective.prefix = AppRegistry.dataHome + "/ricelin/prefixes/" + String(effective.id);
+        }
+        return effective;
     }
 
     function effectiveRunnerFor(app) {
@@ -98,6 +137,14 @@ Singleton {
             return { command: [], environment: {}, workingDirectory: "", error: "Runtime detection has not completed." };
 
         normalized = root.effectiveRecord(normalized);
+        if (normalized.runner === "steam" && !/^[0-9]+$/.test(String(normalized.steamAppId || ""))) {
+            return {
+                command: [],
+                environment: {},
+                workingDirectory: "",
+                error: "Steam needs this game's numeric App ID. Set it in the game editor or choose another runner."
+            };
+        }
         var env = Object.assign({}, normalized.env || {});
         var overrideStr = root.dllOverrideString(normalized.dllOverrides);
         if (overrideStr.length > 0) env.WINEDLLOVERRIDES = overrideStr;
@@ -148,13 +195,33 @@ Singleton {
         }
     }
 
+    /**
+     * Prepare a Wine-family prefix before starting the game. Preparation is
+     * asynchronous and tokenized so a double-click can cancel the launch
+     * continuation without killing prefix initialization halfway through.
+     */
     function launch(appId, useGameMode) {
         if (useGameMode === undefined)
             useGameMode = true;
 
         var app = AppRegistry.byId(appId);
-        if (!app || root.isRunning(appId))
+        if (!app || root.isRunning(appId) || root.isPending(appId))
             return false;
+        if (app.needsSetup || app.folderMissing || !String(app.executable || "")) {
+            var setupMessage = app.folderMissing
+                ? "The game's folder is missing."
+                : "Choose the game's launch executable before launching it.";
+            Quickshell.execDetached(["notify-send", "-u", "normal", "-a", "Ricelin", "Game needs setup: " + app.name, setupMessage]);
+            return false;
+        }
+
+        var effective = root.effectiveRecord(app);
+        if (effective.prefix && String(app.prefix || "") !== effective.prefix
+                && ["wine", "wine-staging", "umu"].indexOf(effective.runner) >= 0) {
+            AppRegistry.update(appId, { prefix: effective.prefix });
+            app = AppRegistry.byId(appId);
+            effective = root.effectiveRecord(app);
+        }
 
         var inv = root.buildInvocation(app);
         if (inv.error || !inv.command || inv.command.length === 0) {
@@ -163,6 +230,48 @@ Singleton {
             Quickshell.execDetached(["notify-send", "-u", "normal", "-a", "Ricelin", "Cannot launch " + app.name, launchError]);
             return false;
         }
+
+        if (["wine", "wine-staging", "umu"].indexOf(effective.runner) >= 0) {
+            var token = String(Date.now()) + "-" + String(++root.nextStartToken);
+            root.pendingStarts = Object.assign({}, root.pendingStarts, { [appId]: token });
+            var accepted = EnvironmentManager.ensurePrefix(effective, function(ok, message) {
+                if (!root.clearPending(appId, token))
+                    return; // canceled or superseded while the helper was running
+
+                if (!ok) {
+                    var reason = String(message || "Prefix preparation failed.");
+                    root.preparationFailed(appId, reason);
+                    Quickshell.execDetached(["notify-send", "-u", "normal", "-a", "Ricelin", "Could not prepare " + app.name, reason]);
+                    return;
+                }
+
+                var current = AppRegistry.byId(appId);
+                if (!current || root.isRunning(appId))
+                    return;
+                var readyInvocation = root.buildInvocation(current);
+                if (readyInvocation.error || !readyInvocation.command || readyInvocation.command.length === 0) {
+                    var reason2 = String(readyInvocation.error || "No launch command was resolved after prefix setup.");
+                    root.launchFailed(appId, reason2);
+                    Quickshell.execDetached(["notify-send", "-u", "normal", "-a", "Ricelin", "Cannot launch " + current.name, reason2]);
+                    return;
+                }
+                root.startInvocation(appId, useGameMode, readyInvocation);
+            });
+            if (!accepted) {
+                root.clearPending(appId, token);
+                return false;
+            }
+            return true;
+        }
+
+        return root.startInvocation(appId, useGameMode, inv);
+    }
+
+    function startInvocation(appId, useGameMode, inv) {
+        var app = AppRegistry.byId(appId);
+        if (!app || root.isRunning(appId) || !inv || !inv.command || inv.command.length === 0)
+            return false;
+
         var proc = procComponent.createObject(root, {
             command: inv.command,
             environment: inv.environment,
@@ -203,8 +312,10 @@ Singleton {
                 if (detail.length > 420)
                     detail = detail.slice(0, 417) + "...";
                 console.warn("Ricelin: application exited with status", exitCode, app.name, detail);
-                if (elapsedMs < 5000)
+                if (elapsedMs < 5000) {
+                    root.launchFailed(appId, detail);
                     Quickshell.execDetached(["notify-send", "-u", "normal", "-a", "Ricelin", "Could not start " + app.name, detail]);
+                }
             }
 
             delete root._procs[appId];
