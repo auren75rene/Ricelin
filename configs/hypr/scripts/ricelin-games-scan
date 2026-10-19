@@ -125,6 +125,13 @@ def scan(root: Path) -> dict:
             candidates: list[dict] = []
             for current, dirs, files in os.walk(folder, followlinks=False):
                 current_path = Path(current)
+                depth = len(current_path.relative_to(folder).parts)
+                # Game payloads can contain millions of data files. Real launch
+                # targets almost always live within a few directory levels; cap
+                # recursion to keep periodic inventory scans cheap.
+                if depth >= 6:
+                    dirs[:] = []
+                    continue
                 dirs[:] = [
                     name for name in dirs
                     if not name.startswith(".")
