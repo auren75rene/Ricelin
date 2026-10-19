@@ -309,11 +309,39 @@ QtObject {
             return;
         }
 
-        if (app.id in root.launchTargets) {
-            if (AppLauncher.isRunning(app.id))
-                AppLauncher.stop(app.id);
+        // If the prefix preparation process is still running, invalidate the
+        // continuation token. The safe helper may finish preparing the prefix,
+        // but the game will not launch after this cancellation.
+        if (AppLauncher.isPending(app.id)) {
+            AppLauncher.cancelPending(app.id);
             root.releaseTarget(app.id);
+            root.stoppingIds = root.clearObjectKey(root.stoppingIds, app.id);
+            root.failedIds = root.clearObjectKey(root.failedIds, app.id);
+            return;
+        }
+
+        // Close game windows politely through Hyprland first. Do not force-kill
+        // a process tree on a double-click; a later explicit force-stop belongs
+        // in the game detail UI after a graceful-close timeout.
+        var existing = root.windowsFor(app);
+        if (existing.length > 0) {
             root.stoppingIds = Object.assign({}, root.stoppingIds, { [app.id]: Date.now() });
+            for (var i = 0; i < existing.length; ++i) {
+                var address = Dock.hex(existing[i].address);
+                if (address.length > 0)
+                    Hyprland.dispatch('hl.dsp.window.close({window="address:' + address + '"})');
+            }
+            return;
+        }
+
+        if (app.id in root.launchTargets) {
+            if (AppLauncher.isRunning(app.id)) {
+                root.stoppingIds = Object.assign({}, root.stoppingIds, { [app.id]: Date.now() });
+                AppLauncher.stop(app.id);
+            } else {
+                root.releaseTarget(app.id);
+                root.failedIds = root.clearObjectKey(root.failedIds, app.id);
+            }
             return;
         }
 
@@ -323,19 +351,7 @@ QtObject {
             return;
         }
 
-        // A window may have been started outside Ricelin, or a Steam CLI wrapper
-        // may have exited while its game remains. Request a polite compositor
-        // close; never force-kill a process tree on a double click.
-        var existing = root.windowsFor(app);
-        for (var i = 0; i < existing.length; ++i) {
-            var address = Dock.hex(existing[i].address);
-            if (address.length > 0)
-                Hyprland.dispatch('hl.dsp.window.close({window="address:' + address + '"})');
-        }
-        if (existing.length > 0)
-            root.stoppingIds = Object.assign({}, root.stoppingIds, { [app.id]: Date.now() });
-        else
-            root.failedIds = root.clearObjectKey(root.failedIds, app.id);
+        root.failedIds = root.clearObjectKey(root.failedIds, app.id);
     }
 
     function reconcileLaunchTargets() {
@@ -409,6 +425,20 @@ QtObject {
                 root.stoppingIds = root.clearObjectKey(root.stoppingIds, appId);
                 root.failApp(appId, "The game is still running after the close request. Use the game's own exit or a separate force-stop action.");
             }
+        }
+    }
+
+    Connections {
+        target: AppLauncher
+        function onPreparationFailed(appId, message) {
+            root.releaseTarget(String(appId));
+            root.queuedIds = root.clearObjectKey(root.queuedIds, String(appId));
+            root.failApp(String(appId), "Prefix preparation failed: " + String(message || "unknown error"));
+        }
+        function onLaunchFailed(appId, message) {
+            root.releaseTarget(String(appId));
+            root.queuedIds = root.clearObjectKey(root.queuedIds, String(appId));
+            root.failApp(String(appId), String(message || "The launch exited before it produced a game window."));
         }
     }
 
