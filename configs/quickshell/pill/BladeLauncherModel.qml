@@ -238,7 +238,7 @@ QtObject {
                 ? RuntimeManager.recommend(Object.assign({}, current, { executable: selected })).runner
                 : current.runner;
             var prefix = String(current.prefix || "");
-            if (/\\.exe$/i.test(selected) && ["wine", "wine-staging", "umu"].indexOf(effectiveRunner) >= 0
+            if (/\.exe$/i.test(selected) && ["wine", "wine-staging", "umu"].indexOf(effectiveRunner) >= 0
                     && prefix.length === 0)
                 prefix = AppRegistry.dataHome + "/ricelin/prefixes/" + current.id;
             AppRegistry.update(current.id, {
