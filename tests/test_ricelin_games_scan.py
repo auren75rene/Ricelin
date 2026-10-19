@@ -2,17 +2,18 @@
 """Unit tests for the read-only Ricelin Games directory scanner."""
 from __future__ import annotations
 
-import importlib.util
+import runpy
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 REPO = Path(__file__).resolve().parents[1]
 SCANNER_PATH = REPO / "configs" / "hypr" / "scripts" / "ricelin-games-scan"
-SPEC = importlib.util.spec_from_file_location("ricelin_games_scan", SCANNER_PATH)
-assert SPEC and SPEC.loader
-SCANNER = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(SCANNER)
+# run_path defines the functions without running the CLI because __name__ is
+# not "__main__"; the scanner filename intentionally has no .py suffix.
+_NAMESPACE = runpy.run_path(str(SCANNER_PATH))
+SCANNER = SimpleNamespace(scan=_NAMESPACE["scan"])
 
 
 class GamesScannerTests(unittest.TestCase):
