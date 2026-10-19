@@ -246,7 +246,7 @@ ShellRoot {
                     return;
                 }
                 root.bladeSmoke = instance;
-                if (instance.fan.count < 1 || instance.fan.placements.length !== instance.fan.count) {
+                if (instance.fan.count < 1 || instance.fan.placements.length !== instance.fan.visibleCount) {
                     root.fail("BladeFan placement mismatch: count=" + instance.fan.count
                         + ", placements=" + (instance.fan.placements ? instance.fan.placements.length : "null")
                         + ", visibleCount=" + instance.fan.visibleCount
