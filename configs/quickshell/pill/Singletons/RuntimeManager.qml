@@ -40,9 +40,10 @@ Singleton {
     property bool hasZenity: false
     property bool hasKdialog: false
 
-    readonly property bool hasAnyWindowsRuntime: root.hasWine || root.hasUmu
+    readonly property bool hasAnyWindowsRuntime: root.hasWine || root.hasWineStaging || root.hasUmu
 
     readonly property var runtimeProfiles: [
+        { id: "auto", label: "Auto", shortLabel: "Auto", family: "auto", description: "Choose the best available runner from game metadata and installed runtimes" },
         { id: "wine", label: "Wine", shortLabel: "Wine", family: "wine", description: "Direct Windows API compatibility layer" },
         { id: "wine-staging", label: "Wine-Staging", shortLabel: "Staging", family: "wine-staging", description: "Experimental Wine build" },
         { id: "umu", label: "UMU / Proton", shortLabel: "UMU", family: "umu", description: "Proton runtime for non-Steam Windows games" },
@@ -58,6 +59,7 @@ Singleton {
     }
 
     function runtimeAvailable(id) {
+        if (id === "auto") return true;
         if (id === "wine") return root.hasWine;
         if (id === "wine-staging") return root.hasWineStaging;
         if (id === "umu") return root.hasUmu;
@@ -83,32 +85,51 @@ Singleton {
     }
 
     /**
-     * graphicsApi -> { runner, protonBuild, reason }. "unknown" and anything
-     * without a strong D3D12 signal falls back to plain Wine so a first-time
-     * add never requires a Proton build the user might not have; D3D12 is
-     * the one case UMU + a Proton build is close to mandatory for.
+     * Evidence-based runner recommendation. A manual runner selection is kept
+     * by the app record and bypasses this function at launch; Auto calls it.
+     * This chooses a reasonable starting point, not a guarantee of compatibility.
      */
     function recommend(app) {
-        var api = app && app.graphicsApi ? app.graphicsApi : "unknown";
-        if (api === "d3d12" && root.hasUmu && root.protonBuilds.length > 0) {
-            return { runner: "umu", protonBuild: root.protonBuilds[0].path || root.protonBuilds[0].name, reason: "Direct3D 12 — UMU + " + root.protonBuilds[0].name + " carries VKD3D-Proton." };
+        var api = String(app && app.graphicsApi ? app.graphicsApi : "unknown").toLowerCase();
+        var steamId = String(app && app.steamAppId ? app.steamAppId : "").trim();
+        var executable = String(app && app.executable ? app.executable : "").toLowerCase();
+        var desktopEntryId = String(app && app.desktopEntryId ? app.desktopEntryId : "").trim();
+        var windowsTarget = /\.(exe|msi|bat|cmd)$/i.test(executable);
+
+        if (steamId.length > 0 && root.hasSteam)
+            return { runner: "steam", protonBuild: "", reason: "A Steam App ID is configured; launch through Steam so it can use its managed compatibility prefix." };
+
+        if (!windowsTarget && (executable.length > 0 || desktopEntryId.length > 0))
+            return { runner: "native", protonBuild: "", reason: "The configured target is a native executable or desktop entry, so no Wine prefix is needed." };
+
+        if (api === "d3d12" && root.hasUmu && root.protonBuilds.length > 0)
+            return { runner: "umu", protonBuild: root.protonBuilds[0].path || root.protonBuilds[0].name, reason: "Direct3D 12 is a strong signal for UMU + Proton/VKD3D-Proton." };
+
+        if (api === "d3d12" && root.hasUmu)
+            return { runner: "umu", protonBuild: "GE-Proton", reason: "Direct3D 12 usually needs Proton/VKD3D-Proton; no local Proton build was detected, so the build must be configured before launch." };
+
+        if ((api === "d3d9" || api === "d3d11") && root.hasWine)
+            return { runner: "wine", protonBuild: "", reason: (api === "d3d9" ? "Direct3D 9" : "Direct3D 11") + " is a reasonable Wine + DXVK starting point." };
+
+        if (String(app && app.category || "").toLowerCase() === "game"
+                && root.hasUmu && root.protonBuilds.length > 0) {
+            return {
+                runner: "umu",
+                protonBuild: root.protonBuilds[0].path || root.protonBuilds[0].name,
+                reason: "Auto prefers the detected UMU + Proton build for this Windows game. If it fails, select another installed runner in the editor."
+            };
         }
-        if (api === "d3d12" && root.hasUmu) {
-            return { runner: "umu", protonBuild: "GE-Proton", reason: "Direct3D 12 wants UMU + Proton, but no local build was found under compatibilitytools.d — install GE-Proton or point Proton build at one manually." };
-        }
-        if ((api === "d3d9" || api === "d3d11") && root.hasWine) {
-            return { runner: "wine", protonBuild: "", reason: (api === "d3d9" ? "Direct3D 9" : "Direct3D 11") + " runs well under Wine + DXVK." };
-        }
-        if (root.hasWineStaging) {
-            return { runner: "wine-staging", protonBuild: "", reason: "No graphics API detected — Wine-Staging is the safest default for a plain Windows utility." };
-        }
-        if (root.hasWine) {
-            return { runner: "wine", protonBuild: "", reason: "Defaulting to Wine." };
-        }
-        if (root.hasUmu) {
-            return { runner: "umu", protonBuild: root.protonBuilds.length > 0 ? (root.protonBuilds[0].path || root.protonBuilds[0].name) : "GE-Proton", reason: "Wine isn't on PATH — falling back to UMU." };
-        }
-        return { runner: "wine", protonBuild: "", reason: "No compatibility layer detected yet — install Wine or UMU, then Rescan." };
+
+        if (root.hasWine)
+            return { runner: "wine", protonBuild: "", reason: "No stronger compatibility hint is available; use the installed Wine runtime as the general-purpose default." };
+
+        if (root.hasWineStaging)
+            return { runner: "wine-staging", protonBuild: "", reason: "Wine was not detected, but Wine-Staging is available." };
+
+        if (root.hasUmu)
+            return { runner: "umu", protonBuild: root.protonBuilds.length > 0 ? (root.protonBuilds[0].path || root.protonBuilds[0].name) : "GE-Proton", reason: "No Wine binary was detected; UMU is the available Windows-game runner." };
+
+        return { runner: "wine", protonBuild: "", reason: "No compatible runner was detected. Install Wine or UMU, then rescan before launching." };
     }
 
     function rescan() {

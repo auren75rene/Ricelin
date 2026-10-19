@@ -1,8 +1,8 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import "Singletons"
-import "lib/desktopentry.js" as DesktopImport
+import "Pill/Singletons"
+import "Pill/lib/desktopentry.js" as DesktopImport
 import "Pill" as Pill
 
 ShellRoot {
@@ -11,6 +11,63 @@ ShellRoot {
     property int attempts: 0
     property string testAppId: ""
     property bool launchDispatched: false
+    property bool prefixEnsureDone: false
+    property string prefixEnsureError: ""
+    property bool gameScanChecked: false
+    property var bladeSmoke: null
+
+    Component {
+        id: bladeSmokeComponent
+        Item {
+            id: bladeSmokeRoot
+            width: 2400
+            height: 1200
+            visible: false
+            property alias fan: smokeFan
+            property alias pagingFan: syntheticFan
+
+            Pill.BladeLauncherModel {
+                id: smokeModel
+                screenName: ""
+            }
+            Pill.BladeFan {
+                id: smokeFan
+                width: 1200
+                height: 1200
+                model: smokeModel
+                s: 1
+                availableRadius: 900
+                open: false
+            }
+
+            QtObject {
+                id: syntheticModel
+                property var items: []
+                readonly property int count: items.length
+                function appAt(index) { return index >= 0 && index < items.length ? items[index] : null; }
+                function stateFor(index) { return "idle"; }
+                function labelFor(index) { return "Auto"; }
+                function launch(index) {}
+                function stop(index) {}
+                Component.onCompleted: {
+                    var next = [];
+                    for (var i = 0; i < 60; ++i)
+                        next.push({ id: "synthetic-" + i, name: "Synthetic Game " + i, iconImage: "" });
+                    items = next;
+                }
+            }
+            Pill.BladeFan {
+                id: syntheticFan
+                x: 1200
+                width: 1200
+                height: 1200
+                model: syntheticModel
+                s: 1
+                availableRadius: 900
+                open: false
+            }
+        }
+    }
 
     Component {
         id: addStyleFormComponent
@@ -52,7 +109,8 @@ ShellRoot {
             EnvironmentManager.winetricks,
             EnvironmentManager.clone,
             EnvironmentManager.reset,
-            EnvironmentManager.remove
+            EnvironmentManager.remove,
+            EnvironmentManager.ensurePrefix
         ]
         for (var i = 0; i < methods.length; ++i) {
             if (typeof methods[i] !== "function") {
@@ -69,13 +127,17 @@ ShellRoot {
             return
         }
 
-        if (!EnvironmentManager.create({
+        if (!EnvironmentManager.ensurePrefix({
             prefix: prefix,
             runner: "umu",
             executable: executable,
             workingDirectory: workingDirectory
+        }, function(ok, message) {
+            root.prefixEnsureDone = true;
+            if (!ok)
+                root.prefixEnsureError = String(message || "unknown prefix preparation error");
         })) {
-            fail("prefix create action was not dispatched")
+            fail("prefix ensure action was not dispatched")
             return
         }
 
@@ -136,11 +198,80 @@ ShellRoot {
                 return
             }
 
+            if (root.prefixEnsureError.length > 0) {
+                root.fail("prefix ensure failed: " + root.prefixEnsureError)
+                return
+            }
+            if (!root.prefixEnsureDone)
+                return
+
             if (!AppRegistry.ready)
                 return
             if (AppRegistry.loadError.length > 0) {
                 root.fail("application registry did not load: " + AppRegistry.loadError)
                 return
+            }
+
+            var expectedGameFolder = Quickshell.env("RICELIN_TEST_GAME_FOLDER") || ""
+            var expectedGameExecutable = Quickshell.env("RICELIN_TEST_EXECUTABLE") || ""
+            if (expectedGameFolder.length > 0 && !root.gameScanChecked) {
+                var discoveredGame = null
+                for (var g = 0; g < AppRegistry.apps.length; ++g) {
+                    var gameRecord = AppRegistry.apps[g]
+                    if (gameRecord && gameRecord.discovered
+                            && String(gameRecord.sourcePath || "") === expectedGameFolder) {
+                        discoveredGame = gameRecord
+                        break
+                    }
+                }
+                // The scanner is an asynchronous Process; let its first poll finish.
+                if (!discoveredGame)
+                    return
+                if (String(discoveredGame.executable || "") !== expectedGameExecutable || discoveredGame.needsSetup) {
+                    root.fail("Games scanner did not register the expected executable: " + JSON.stringify(discoveredGame))
+                    return
+                }
+                if (String(discoveredGame.prefix || "").indexOf("/ricelin/prefixes/") < 0) {
+                    root.fail("discovered Windows game did not receive a dedicated prefix outside its game folder")
+                    return
+                }
+                root.gameScanChecked = true
+
+                // Compile and create the actual fan/model offscreen so CI covers
+                // the balanced-layout QML, not just its pure JavaScript geometry.
+                var instance = bladeSmokeComponent.createObject(null);
+                if (!instance || !instance.fan) {
+                    if (instance) instance.destroy();
+                    root.fail("BladeFan could not be instantiated in the headless runtime");
+                    return;
+                }
+                root.bladeSmoke = instance;
+                if (instance.fan.count < 1 || instance.fan.placements.length !== instance.fan.visibleCount) {
+                    var firstRegistryApp = AppRegistry.apps.length > 0 ? AppRegistry.apps[0] : null;
+                    root.fail("BladeFan placement mismatch: fanCount=" + instance.fan.count
+                        + ", modelCount=" + instance.fan.model.count
+                        + ", modelApps=" + instance.fan.model.apps.length
+                        + ", registryApps=" + AppRegistry.apps.length
+                        + ", firstApp=" + JSON.stringify(firstRegistryApp)
+                        + ", placements=" + (instance.fan.placements ? instance.fan.placements.length : "null")
+                        + ", visibleCount=" + instance.fan.visibleCount
+                        + ", fit=" + JSON.stringify(instance.fan.layoutFit));
+                    return;
+                }
+                if (instance.pagingFan.count !== 60
+                        || instance.pagingFan.pageCount < 2
+                        || instance.pagingFan.visibleCount > instance.pagingFan.pageCapacity
+                        || instance.pagingFan.layoutFit.overflows) {
+                    root.fail("large game library did not paginate within the available radius");
+                    return;
+                }
+                instance.pagingFan.showPage(1);
+                if (instance.pagingFan.page !== 1
+                        || instance.pagingFan.pageStart !== instance.pagingFan.pageCapacity
+                        || instance.pagingFan.visibleCount !== 60 - instance.pagingFan.pageCapacity) {
+                    root.fail("page navigation did not expose the remaining games");
+                    return;
+                }
             }
 
             var desktopExecutable = Quickshell.env("RICELIN_TEST_DESKTOP_EXECUTABLE") || ""

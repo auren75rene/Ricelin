@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Shapes
 import "Singletons"
+import "lib/blades.js" as Blades
 
 /**
  * The blade fan: a quarter-circle of guide rays and arcs growing out of the
@@ -39,16 +40,53 @@ Item {
     readonly property real originX: 24 * s
     readonly property real originY: 24 * s
     readonly property real beadSize: 44 * s
-    readonly property real sectorSize: 540 * s
     readonly property real fanStartRadius: 250 * s
-    readonly property real fanEndRadius: 505 * s
+    /** Maximum radial distance available on the physical output, in pixels. */
+    property real availableRadius: 1000
+    readonly property real ringGap: 16 * s
     readonly property real bladeHeight: 52 * s
+
+    readonly property int count: model ? model.count : 0
+    readonly property int maxPerRing: 6
+    readonly property real minimumBladeLength: 64 * s
+    /** Pages contain only as many cards as can fit legibly on this output. */
+    readonly property int maxRingsPerPage: Math.max(1,
+        Math.floor((availableRadius - fanStartRadius + ringGap) / (minimumBladeLength + ringGap)))
+    readonly property int pageCapacity: maxPerRing * maxRingsPerPage
+    readonly property int pageCount: Math.max(1, Math.ceil(count / pageCapacity))
+    property int page: 0
+    readonly property int pageStart: page * pageCapacity
+    readonly property int visibleCount: Math.min(pageCapacity, Math.max(0, count - pageStart))
+
+    readonly property var layoutFit: Blades.fitLayout(
+        visibleCount, maxPerRing, fanStartRadius, availableRadius, 255 * s, ringGap, minimumBladeLength)
+    readonly property int ringCount: layoutFit.ringCount
+    readonly property var placements: layoutFit.placements
+    readonly property real bladeLength: layoutFit.bladeLength
+    readonly property real ringStep: layoutFit.ringStep
+    readonly property real fanEndRadius: layoutFit.outerRadius
+    /** Outer space for page controls and the edge of the glass sector. */
+    readonly property real sectorSize: fanEndRadius + (pageCount > 1 ? 60 : 24) * s
     /** How far from the origin the pointer still counts as "on the fan". */
     readonly property real reach: sectorSize + 30 * s
     /** Size of the square the fan needs: origin offset plus its reach. */
     readonly property real extent: originX + reach
 
-    readonly property int count: model ? model.count : 0
+    onPageCountChanged: if (page >= pageCount) page = pageCount - 1
+    onCountChanged: if (page >= pageCount) page = pageCount - 1
+    onAvailableRadiusChanged: if (page >= pageCount) page = pageCount - 1
+
+    function showPage(nextPage) {
+        fan.page = Math.max(0, Math.min(fan.pageCount - 1, Math.floor(Number(nextPage) || 0)));
+    }
+
+    function appIndex(localIndex) {
+        return fan.pageStart + localIndex;
+    }
+
+    function placementAt(index) {
+        return index >= 0 && index < fan.placements.length ? fan.placements[index] : null;
+    }
 
     property real progress: open ? 1 : 0
     Behavior on progress {
@@ -60,13 +98,17 @@ Item {
     }
 
     function fanAngle(index) {
-        return count <= 1 ? 43 : 8 + 70 * index / (count - 1);
+        var p = fan.placementAt(index);
+        return p ? p.angle : 43;
     }
 
-    /** Per-blade progress: later blades start slightly after earlier ones, so the fan unfolds instead of popping. */
+    /** Stagger each balanced ring independently; the delay remains bounded for any number of games. */
     function bladeProgress(index) {
-        var lag = count > 1 ? 0.08 : 0;
-        return Math.max(0, Math.min(1, (progress - lag * index) / (1 - lag * (count - 1))));
+        var p = fan.placementAt(index);
+        if (!p || p.ringSize <= 1)
+            return progress;
+        var lag = Math.min(0.07, 0.5 / (p.ringSize - 1));
+        return Math.max(0, Math.min(1, (progress - lag * p.slot) / (1 - lag * (p.ringSize - 1))));
     }
 
     // Liquid-glass lens behind the fan. Its tint stays deliberately faint so
@@ -131,12 +173,12 @@ Item {
 
     // Concentric guide arcs.
     Repeater {
-        model: [150, 250, 350, 450, 520]
+        model: Math.max(5, Math.ceil((fan.fanEndRadius / fan.s - 150) / 100) + 1)
 
         delegate: Shape {
             id: arc
-            required property real modelData
-            readonly property real r: modelData * fan.s
+            required property int index
+            readonly property real r: (150 + 100 * index) * fan.s
 
             x: fan.originX - r
             y: fan.originY - r
@@ -164,7 +206,7 @@ Item {
 
     // Guide rays, one per blade.
     Repeater {
-        model: fan.count
+        model: fan.visibleCount
 
         delegate: Rectangle {
             id: ray
@@ -211,24 +253,26 @@ Item {
 
     // The blades.
     Repeater {
-        model: fan.count
+        model: fan.visibleCount
 
         delegate: Item {
             id: blade
             required property int index
+            readonly property int appIndex: fan.appIndex(index)
 
-            readonly property var app: fan.model.appAt(index)
-            readonly property string appState: fan.model.stateFor(index)
+            readonly property var app: fan.model.appAt(appIndex)
+            readonly property var placement: fan.placementAt(index)
+            readonly property string appState: fan.model.stateFor(appIndex)
             readonly property real p: fan.bladeProgress(index)
 
-            // Angle of this blade right now: it starts lying along the first ray and
-            // swings out to its own as the fan opens, pivoting about the origin.
-            readonly property real theta: fan.fanAngle(0) + (fan.fanAngle(index) - fan.fanAngle(0)) * p
+            // Every ring unfolds symmetrically from its centre ray.
+            readonly property real theta: 43 + (fan.fanAngle(index) - 43) * p
+            readonly property real startRadius: fan.fanStartRadius + (placement ? placement.ring * fan.ringStep : 0)
 
-            width: fan.fanEndRadius - fan.fanStartRadius
+            width: fan.bladeLength
             height: fan.bladeHeight
-            x: fan.originX + Math.cos(theta * Math.PI / 180) * fan.fanStartRadius
-            y: fan.originY + Math.sin(theta * Math.PI / 180) * fan.fanStartRadius - height / 2
+            x: fan.originX + Math.cos(theta * Math.PI / 180) * startRadius
+            y: fan.originY + Math.sin(theta * Math.PI / 180) * startRadius - height / 2
             z: 100 + index
             visible: p > 0.002
             opacity: p
@@ -300,14 +344,27 @@ Item {
                     Text {
                         width: parent.width
                         text: {
-                            var base = fan.model.labelFor(blade.index);
+                            var base = fan.model.labelFor(blade.appIndex);
                             if (blade.appState === "running")
                                 return base + "  ·  running";
+                            if (blade.appState === "preparing")
+                                return "preparing game prefix";
                             if (blade.appState === "launching")
-                                return base + "  ·  starting";
+                                return base + "  ·  launching";
+                            if (blade.appState === "waiting")
+                                return "waiting for empty workspace";
+                            if (blade.appState === "stopping")
+                                return "stopping";
+                            if (blade.appState === "setup")
+                                return "choose launch executable";
+                            if (blade.appState === "missing")
+                                return "game folder missing";
+                            if (blade.appState === "failed")
+                                return "needs attention";
                             return base;
                         }
-                        color: blade.appState === "idle" ? Theme.faint : Theme.flameGlow
+                        color: ["failed", "setup", "missing"].indexOf(blade.appState) >= 0 ? Theme.vermLit
+                            : (blade.appState === "idle" ? Theme.faint : Theme.flameGlow)
                         font.family: Theme.font
                         font.pixelSize: 10 * fan.s
                         font.weight: Font.Medium
@@ -324,7 +381,7 @@ Item {
                     height: width
                     radius: width / 2
                     visible: blade.appState !== "idle"
-                    color: Theme.onGlow
+                    color: ["failed", "setup", "missing"].indexOf(blade.appState) >= 0 ? Theme.vermLit : Theme.onGlow
                     SequentialAnimation on opacity {
                         running: dot.visible
                         loops: Animation.Infinite
@@ -339,13 +396,101 @@ Item {
                 cursorShape: Qt.PointingHandCursor
             }
 
-            TapHandler {
-                id: tap
-                onTapped: {
-                    fan.model.launch(blade.index);
+            property bool tapPending: false
+
+            // Delay single-click activation briefly so a double click has one
+            // unambiguous meaning: stop (or cancel a queued launch).
+            Timer {
+                id: tapDisambiguation
+                interval: 260
+                onTriggered: {
+                    blade.tapPending = false;
+                    fan.model.launch(blade.appIndex);
                     fan.launched();
                 }
             }
+
+            TapHandler {
+                id: tap
+                onTapped: {
+                    if (blade.tapPending) {
+                        tapDisambiguation.stop();
+                        blade.tapPending = false;
+                        fan.model.stop(blade.appIndex);
+                        fan.launched();
+                    } else {
+                        blade.tapPending = true;
+                        tapDisambiguation.restart();
+                    }
+                }
+            }
         }
+
+    }
+
+    // Explicit page controls keep every game reachable without shrinking cards
+    // until their labels become unreadable. They live just outside the outer ring.
+    readonly property real pagerRadius: fan.fanEndRadius + 43 * fan.s
+
+    Rectangle {
+        id: previousPage
+        visible: fan.open && fan.pageCount > 1 && fan.page > 0
+        z: 50000
+        width: 26 * fan.s
+        height: width
+        radius: width / 2
+        x: fan.originX + Math.cos(34 * Math.PI / 180) * fan.pagerRadius - width / 2
+        y: fan.originY + Math.sin(34 * Math.PI / 180) * fan.pagerRadius - height / 2
+        color: Qt.alpha(Theme.cardTop, hoverPrev.hovered ? 0.96 : 0.80)
+        border.width: 1
+        border.color: Theme.hair
+        Text {
+            anchors.centerIn: parent
+            text: "‹"
+            color: Theme.cream
+            font.family: Theme.font
+            font.pixelSize: 19 * fan.s
+            font.weight: Font.DemiBold
+        }
+        HoverHandler { id: hoverPrev; cursorShape: Qt.PointingHandCursor }
+        TapHandler { onTapped: fan.showPage(fan.page - 1) }
+    }
+
+    Rectangle {
+        id: nextPage
+        visible: fan.open && fan.pageCount > 1 && fan.page < fan.pageCount - 1
+        z: 50000
+        width: 26 * fan.s
+        height: width
+        radius: width / 2
+        x: fan.originX + Math.cos(52 * Math.PI / 180) * fan.pagerRadius - width / 2
+        y: fan.originY + Math.sin(52 * Math.PI / 180) * fan.pagerRadius - height / 2
+        color: Qt.alpha(Theme.cardTop, hoverNext.hovered ? 0.96 : 0.80)
+        border.width: 1
+        border.color: Theme.hair
+        Text {
+            anchors.centerIn: parent
+            text: "›"
+            color: Theme.cream
+            font.family: Theme.font
+            font.pixelSize: 19 * fan.s
+            font.weight: Font.DemiBold
+        }
+        HoverHandler { id: hoverNext; cursorShape: Qt.PointingHandCursor }
+        TapHandler { onTapped: fan.showPage(fan.page + 1) }
+    }
+
+    Text {
+        visible: fan.open && fan.pageCount > 1
+        z: 50000
+        x: fan.originX + Math.cos(43 * Math.PI / 180) * fan.pagerRadius - width / 2
+        y: fan.originY + Math.sin(43 * Math.PI / 180) * fan.pagerRadius - height / 2
+        width: 44 * fan.s
+        horizontalAlignment: Text.AlignHCenter
+        text: (fan.page + 1) + " / " + fan.pageCount
+        color: Theme.cream
+        font.family: Theme.font
+        font.pixelSize: 10 * fan.s
+        font.weight: Font.DemiBold
     }
 }

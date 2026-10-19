@@ -23,7 +23,8 @@ Item {
 
     required property var app
     property real s: 1
-    readonly property bool canManageWinePrefix: ["wine", "wine-staging", "umu"].indexOf(root.app.runner) >= 0
+    readonly property string effectiveRunner: root.app.runner === "auto" ? RuntimeManager.recommend(root.app).runner : root.app.runner
+    readonly property bool canManageWinePrefix: ["wine", "wine-staging", "umu"].indexOf(root.effectiveRunner) >= 0
 
     signal back()
 
@@ -365,7 +366,9 @@ Item {
         Item { width: 1; height: 10 * root.s }
         SettingsRow {
             name: "Runner"
-            sub: RuntimeManager.runtimeAvailable(root.app.runner) ? "" : RuntimeManager.profileFor(root.app.runner).label + " isn't confirmed installed — this app is already configured to use it, so it stays selectable. Rescan if you've just installed it."
+            sub: root.app.runner === "auto"
+                ? "Auto selects " + RuntimeManager.profileFor(root.effectiveRunner).label + ": " + RuntimeManager.recommend(root.app).reason
+                : (RuntimeManager.runtimeAvailable(root.app.runner) ? "" : RuntimeManager.profileFor(root.app.runner).label + " isn't confirmed installed — this app is already configured to use it, so it stays selectable. Rescan if you've just installed it.")
             last: true
             control: SettingsSeg {
                 s: root.s
@@ -375,10 +378,17 @@ Item {
             }
         }
         Item { width: 1; height: 10 * root.s }
-        LabeledField { s: root.s; label: "Executable"; text: root.app.executable; browse: "file"; onCommitted: (v) => root.patch({ executable: v }) }
+        LabeledField { s: root.s; label: "Executable"; text: root.app.executable; browse: "file"; onCommitted: (v) => root.patch({ executable: v, needsSetup: false, folderMissing: false }) }
         Item { width: 1; height: 10 * root.s }
         LabeledField { s: root.s; label: "Working directory"; text: root.app.workingDirectory; placeholder: "Auto-detect from executable"; browse: "folder"; onCommitted: (v) => root.patch({ workingDirectory: v }) }
-        Item { width: 1; height: 10 * root.s }
+        Item { width: 1; height: root.effectiveRunner === "steam" ? 10 * root.s : 0; visible: root.effectiveRunner === "steam" }
+        LabeledField {
+            visible: root.effectiveRunner === "steam"
+            s: root.s; label: "Steam App ID"; text: root.app.steamAppId
+            placeholder: "Numeric Steam App ID"
+            onCommitted: (v) => root.patch({ steamAppId: v.trim() })
+        }
+        Item { width: 1; height: root.effectiveRunner === "steam" ? 10 * root.s : 0; visible: root.effectiveRunner === "steam" }
         LabeledField { s: root.s; label: "Prefix / environment"; text: root.app.prefix; browse: "folder"; onCommitted: (v) => root.patch({ prefix: v }) }
         Item { width: 1; height: 8 * root.s }
         Flow {
@@ -409,11 +419,11 @@ Item {
                     }
                 }
             }
-            TextButton { visible: root.app.runner !== "native"; label: "Open Files"; onClicked: AppLauncher.openPrefixFiles(root.app) }
-            TextButton { visible: root.app.runner !== "native"; label: "Winetricks"; onClicked: AppLauncher.runWinetricks(root.app) }
+            TextButton { visible: root.canManageWinePrefix; label: "Open Files"; onClicked: AppLauncher.openPrefixFiles(root.app) }
+            TextButton { visible: root.canManageWinePrefix; label: "Winetricks"; onClicked: AppLauncher.runWinetricks(root.app) }
         }
         Text {
-            visible: root.app.runner === "steam"
+            visible: root.effectiveRunner === "steam"
             width: parent.width
             wrapMode: Text.WordWrap
             text: "Steam manages its Proton runtime; creation, cloning and resetting are disabled here."
@@ -422,7 +432,7 @@ Item {
             font.pixelSize: 10 * root.s
         }
         Text {
-            visible: root.app.runner === "native"
+            visible: root.effectiveRunner === "native"
             width: parent.width
             wrapMode: Text.WordWrap
             text: "Native Linux apps launch directly; Wine prefix tools are disabled for this runner."
@@ -447,13 +457,13 @@ Item {
             onTriggered: { armed = false; targetPath = ""; }
         }
 
-        Item { width: 1; height: 10 * root.s; visible: root.app.runner === "umu" }
+        Item { width: 1; height: 10 * root.s; visible: root.effectiveRunner === "umu" }
         LabeledField {
-            visible: root.app.runner === "umu"
+            visible: root.effectiveRunner === "umu"
             s: root.s; label: "UMU game ID"; text: root.app.umuId; placeholder: "umu-" + root.app.id
             onCommitted: (v) => root.patch({ umuId: v })
         }
-        Item { width: 1; height: 10 * root.s; visible: root.app.runner === "umu" }
+        Item { width: 1; height: 10 * root.s; visible: root.effectiveRunner === "umu" }
         SettingsRow {
             visible: root.app.runner === "umu"
             name: "Proton build"

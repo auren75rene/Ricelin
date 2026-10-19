@@ -68,7 +68,10 @@ PanelWindow {
         shape: RegionShape.Ellipse
     }
 
-    BladeLauncherModel { id: bladeModel }
+    BladeLauncherModel {
+        id: bladeModel
+        screenName: root.modelData ? root.modelData.name : ""
+    }
 
     function collapse() {
         root.pinned = false;
@@ -110,6 +113,7 @@ PanelWindow {
             anchors.fill: parent
             model: bladeModel
             s: root.s
+            availableRadius: Math.max(700 * root.s, (root.modelData ? root.modelData.height : 1080) * 0.86)
             open: root.open
             onToggleRequested: root.pinned = !root.pinned
             onLaunched: root.collapse()
