@@ -40,6 +40,7 @@ Singleton {
 
     signal preparationFailed(string appId, string message)
     signal launchFailed(string appId, string message)
+    signal launchDeferred(string appId, string message)
 
     function isRunning(appId) {
         return appId in root.runningIds;
@@ -200,9 +201,22 @@ Singleton {
      * asynchronous and tokenized so a double-click can cancel the launch
      * continuation without killing prefix initialization halfway through.
      */
-    function launch(appId, useGameMode) {
+    function launch(appId, useGameMode, beforeStart) {
         if (useGameMode === undefined)
             useGameMode = true;
+
+        function mayStart() {
+            if (typeof beforeStart !== "function")
+                return true;
+            try {
+                if (beforeStart())
+                    return true;
+            } catch (error) {
+                console.warn("Ricelin: pre-launch workspace check failed", appId, String(error));
+            }
+            root.launchDeferred(String(appId), "The reserved workspace is no longer empty. Waiting for an empty workspace.");
+            return false;
+        }
 
         var app = AppRegistry.byId(appId);
         if (!app || root.isRunning(appId) || root.isPending(appId))
@@ -255,6 +269,8 @@ Singleton {
                     Quickshell.execDetached(["notify-send", "-u", "normal", "-a", "Ricelin", "Cannot launch " + current.name, reason2]);
                     return;
                 }
+                if (!mayStart())
+                    return;
                 root.startInvocation(appId, useGameMode, readyInvocation);
             });
             if (!accepted) {
@@ -264,6 +280,8 @@ Singleton {
             return true;
         }
 
+        if (!mayStart())
+            return false;
         return root.startInvocation(appId, useGameMode, inv);
     }
 
