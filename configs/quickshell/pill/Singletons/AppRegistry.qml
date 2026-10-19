@@ -270,6 +270,7 @@ Singleton {
             if (at >= 0) {
                 var old = next[at];
                 var replacement = Object.assign({}, old, {
+                    category: "game",
                     sourcePath: source,
                     gameFolder: String(game.gameFolder || source),
                     candidateExecutables: Array.isArray(game.candidateExecutables) ? game.candidateExecutables : [],
@@ -292,7 +293,13 @@ Singleton {
             }
 
             var name = String(game.name || source.split("/").pop() || "Game");
-            var id = root.uniqueId(root.slugify(name));
+            var idBase = root.slugify(name);
+            var id = idBase;
+            var suffix = 2;
+            while (next.some(item => String(item.id || "") === id)) {
+                id = idBase + "-" + suffix;
+                suffix++;
+            }
             var executable = String(game.executable || "");
             var candidates = Array.isArray(game.candidateExecutables) ? game.candidateExecutables : [];
             var hasWindowsCandidate = /\.exe$/i.test(executable)
