@@ -187,7 +187,6 @@ Singleton {
         }
 
         pidTimer.createObject(root, { appId: appId, proc: proc });
-        return true;
 
         proc.exited.connect(function (exitCode, exitStatus) {
             var launched = root.runningIds[appId];
@@ -219,6 +218,7 @@ Singleton {
             }
             proc.destroy();
         });
+        return true;
     }
 
     /** A one-shot Timer component rather than a single shared Timer, since several launches can be settling their pid at once. */
