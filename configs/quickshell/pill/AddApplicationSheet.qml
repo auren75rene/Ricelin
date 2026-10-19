@@ -29,6 +29,7 @@ Item {
     property string executable: ""
     property string workingDirectory: ""
     property string prefix: ""
+    property string steamAppId: ""
     property bool nameTouched: false
     property bool prefixTouched: false
     property bool applyingExecutablePick: false
@@ -82,6 +83,7 @@ Item {
             executable: root.executable.trim(),
             workingDirectory: root.workingDirectory.trim(),
             prefix: root.prefix.trim(),
+            steamAppId: root.steamAppId.trim(),
             umuId: root.runner === "umu" ? ("umu-" + AppRegistry.slugify(root.name)) : ""
         });
         root.added(rec.id);
@@ -194,6 +196,15 @@ Item {
             }
         }
 
+        Item { width: 1; height: root.runner === "steam" ? 10 * root.s : 0; visible: root.runner === "steam" }
+        LabeledField {
+            visible: root.runner === "steam"
+            s: root.s
+            label: "Steam App ID"
+            text: root.steamAppId
+            placeholder: "Numeric Steam App ID"
+            onTextChanged: root.steamAppId = text
+        }
         Item { width: 1; height: 10 * root.s }
         LabeledField {
             s: root.s
