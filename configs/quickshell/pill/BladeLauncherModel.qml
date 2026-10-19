@@ -153,14 +153,45 @@ QtObject {
         return app ? RuntimeManager.profileFor(AppLauncher.effectiveRunnerFor(app)).shortLabel : "";
     }
 
-    function targetMonitorFor(app) {
+    function monitorExists(name) {
+        if (!name)
+            return false;
+        var monitors = Hyprland.monitors.values || [];
+        for (var i = 0; i < monitors.length; ++i)
+            if (monitors[i] && String(monitors[i].name || "") === String(name))
+                return true;
+        return false;
+    }
+
+    function configuredMonitorFor(app) {
         var configured = app && app.window ? String(app.window.monitor || "") : "";
         if (configured.length > 0 && configured.toLowerCase() !== "automatic" && configured.toLowerCase() !== "auto")
             return configured;
-        if (root.screenName.length > 0)
-            return root.screenName;
-        return Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : "";
+        return "";
     }
+
+    function targetMonitorFor(app) {
+        var configured = root.configuredMonitorFor(app);
+        if (configured && root.monitorExists(configured))
+            return configured;
+        if (root.screenName && root.monitorExists(root.screenName))
+            return root.screenName;
+        var focused = Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : "";
+        return root.monitorExists(focused) ? focused : "";
+    }
+
+    function notifyMonitorFallback(app) {
+        var configured = root.configuredMonitorFor(app);
+        if (!configured || root.monitorExists(configured) || app.id in root.monitorFallbackNotified)
+            return;
+        var fallback = root.targetMonitorFor(app);
+        root.monitorFallbackNotified = Object.assign({}, root.monitorFallbackNotified, { [app.id]: true });
+        Quickshell.execDetached(["notify-send", "-u", "normal", "-a", "Ricelin",
+            "Game monitor unavailable", app.name + " was configured for " + configured
+                + ", which is not connected. Waiting on " + (fallback || "a connected monitor") + " instead."]);
+    }
+
+    property var monitorFallbackNotified: ({})
 
     function emptyWorkspaceFor(app) {
         return Blades.chooseEmptyWorkspace(
@@ -223,7 +254,7 @@ QtObject {
                         || String(w.workspace || "") === target.workspaceName)
                     return false;
             }
-            Hyprland.dispatch('hl.dsp.focus({workspace="' + target.workspaceName + '"})');
+            Hyprland.dispatch("hl.dsp.focus({ workspace = " + Number(target.workspaceId) + " })");
             return true;
         })) {
             root.releaseTarget(app.id);
@@ -308,6 +339,7 @@ QtObject {
             return;
 
         root.failedIds = root.clearObjectKey(root.failedIds, app.id);
+        root.notifyMonitorFallback(app);
         var workspace = root.emptyWorkspaceFor(app);
         if (!workspace) {
             // Queue intent only. No process, Wine prefix, or Steam launch starts
