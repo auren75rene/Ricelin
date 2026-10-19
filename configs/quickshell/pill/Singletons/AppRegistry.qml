@@ -383,7 +383,10 @@ Singleton {
     }
 
     Timer {
-        interval: 30000
+        // The scanner walks a bounded depth into each game folder. Avoid
+        // repeatedly traversing large game payloads; new games usually appear
+        // within a minute, and a manual scan can be added to the UI later.
+        interval: 60000
         repeat: true
         running: root.ready && !root.loadError
         onTriggered: root.scanGames()
