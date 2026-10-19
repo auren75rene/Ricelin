@@ -20,10 +20,12 @@ ShellRoot {
         id: bladeSmokeComponent
         Item {
             id: bladeSmokeRoot
-            width: 1200
+            width: 2400
             height: 1200
             visible: false
             property alias fan: smokeFan
+            property alias pagingFan: syntheticFan
+
             Pill.BladeLauncherModel {
                 id: smokeModel
                 screenName: ""
@@ -33,6 +35,33 @@ ShellRoot {
                 width: 1200
                 height: 1200
                 model: smokeModel
+                s: 1
+                availableRadius: 900
+                open: false
+            }
+
+            QtObject {
+                id: syntheticModel
+                property var items: []
+                readonly property int count: items.length
+                function appAt(index) { return index >= 0 && index < items.length ? items[index] : null; }
+                function stateFor(index) { return "idle"; }
+                function labelFor(index) { return "Auto"; }
+                function launch(index) {}
+                function stop(index) {}
+                Component.onCompleted: {
+                    var next = [];
+                    for (var i = 0; i < 60; ++i)
+                        next.push({ id: "synthetic-" + i, name: "Synthetic Game " + i, iconImage: "" });
+                    items = next;
+                }
+            }
+            Pill.BladeFan {
+                id: syntheticFan
+                x: 1200
+                width: 1200
+                height: 1200
+                model: syntheticModel
                 s: 1
                 availableRadius: 900
                 open: false
@@ -219,6 +248,20 @@ ShellRoot {
                 root.bladeSmoke = instance;
                 if (instance.fan.count < 1 || instance.fan.placements.length !== instance.fan.count) {
                     root.fail("BladeFan did not produce one placement per discovered game");
+                    return;
+                }
+                if (instance.pagingFan.count !== 60
+                        || instance.pagingFan.pageCount < 2
+                        || instance.pagingFan.visibleCount > instance.pagingFan.pageCapacity
+                        || instance.pagingFan.layoutFit.overflows) {
+                    root.fail("large game library did not paginate within the available radius");
+                    return;
+                }
+                instance.pagingFan.showPage(1);
+                if (instance.pagingFan.page !== 1
+                        || instance.pagingFan.pageStart !== instance.pagingFan.pageCapacity
+                        || instance.pagingFan.visibleCount !== 60 - instance.pagingFan.pageCapacity) {
+                    root.fail("page navigation did not expose the remaining games");
                     return;
                 }
             }
