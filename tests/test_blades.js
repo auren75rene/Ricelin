@@ -19,7 +19,7 @@ function check(name, fn) {
     try { fn(); console.log("  ok   " + name); }
     catch (e) { failed++; console.log("  FAIL " + name + "\n         " + e.message); }
 }
-const rec = (o) => Object.assign({ id: "x", name: "X", category: "game", runner: "wine", favorite: false, lastLaunched: 0 }, o);
+const rec = (o) => Object.assign({ id: "x", name: "X", category: "game", runner: "wine", favorite: false, lastLaunched: 0, createdAt: 0 }, o);
 const names = (list) => list.map((a) => a.name).join(",");
 
 console.log("eligible");
@@ -39,15 +39,15 @@ check("null and undefined are tolerated", () => { assert.ok(!B.eligible(null)); 
 check("case does not matter", () => assert.ok(B.eligible(rec({ category: "Game", runner: "WINE" }))));
 
 console.log("order");
-check("pinned, favorite, recent, then name", () => {
+check("pin/favourite priority is stable and recent launches do not reorder blades", () => {
     const apps = [
-        rec({ id: "a", name: "Alpha" }),
-        rec({ id: "b", name: "Bravo", lastLaunched: 50 }),
-        rec({ id: "c", name: "Charlie", favorite: true }),
-        rec({ id: "d", name: "Delta", category: "utility", runner: "native", blade: "pin" }),
-        rec({ id: "e", name: "Echo", lastLaunched: 90 }),
+        rec({ id: "a", name: "Alpha", bladeOrder: 0, lastLaunched: 999 }),
+        rec({ id: "b", name: "Bravo", bladeOrder: 1, lastLaunched: 10 }),
+        rec({ id: "c", name: "Charlie", favorite: true, bladeOrder: 2 }),
+        rec({ id: "d", name: "Delta", category: "utility", runner: "native", blade: "pin", bladeOrder: 3 }),
+        rec({ id: "e", name: "Echo", bladeOrder: 4, lastLaunched: 500 }),
     ];
-    assert.strictEqual(names(B.select(apps, 0)), "Delta,Charlie,Echo,Bravo,Alpha");
+    assert.strictEqual(names(B.select(apps, 0)), "Delta,Charlie,Alpha,Bravo,Echo");
 });
 check("name order is case-insensitive", () => {
     const apps = [rec({ id: "1", name: "zeta" }), rec({ id: "2", name: "Alpha" })];
@@ -56,8 +56,8 @@ check("name order is case-insensitive", () => {
 
 console.log("cap");
 check("max keeps the first N in blade order", () => {
-    const apps = ["A", "B", "C", "D"].map((n, i) => rec({ id: n, name: n, lastLaunched: i }));
-    assert.strictEqual(names(B.select(apps, 2)), "D,C");
+    const apps = ["A", "B", "C", "D"].map((n, i) => rec({ id: n, name: n, bladeOrder: i, lastLaunched: 3 - i }));
+    assert.strictEqual(names(B.select(apps, 2)), "A,B");
 });
 check("max 0 means no cap", () => {
     const apps = ["A", "B", "C"].map((n) => rec({ id: n, name: n }));
