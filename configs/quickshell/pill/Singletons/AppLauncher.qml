@@ -74,9 +74,30 @@ Singleton {
         return DesktopImport.findEntry(DesktopEntries.applications.values || [], app);
     }
 
-    /** Builds { command, environment, workingDirectory } for the app's current runner. Extracted from launch() so AddApplicationSheet can preview it before saving. */
+    /** Resolve Auto once for execution; preserve the user's configured runner in the registry. */
+    function effectiveRecord(app) {
+        var normalized = AppRegistry.normalizeRecord(app);
+        if (normalized.runner !== "auto")
+            return normalized;
+        var recommendation = RuntimeManager.recommend(normalized);
+        return Object.assign({}, normalized, {
+            runner: recommendation.runner,
+            protonBuild: recommendation.protonBuild || normalized.protonBuild,
+            runnerReason: recommendation.reason
+        });
+    }
+
+    function effectiveRunnerFor(app) {
+        return root.effectiveRecord(app).runner;
+    }
+
+    /** Builds { command, environment, workingDirectory } for the effective runner. */
     function buildInvocation(app) {
         var normalized = AppRegistry.normalizeRecord(app);
+        if (normalized.runner === "auto" && !RuntimeManager.ready)
+            return { command: [], environment: {}, workingDirectory: "", error: "Runtime detection has not completed." };
+
+        normalized = root.effectiveRecord(normalized);
         var env = Object.assign({}, normalized.env || {});
         var overrideStr = root.dllOverrideString(normalized.dllOverrides);
         if (overrideStr.length > 0) env.WINEDLLOVERRIDES = overrideStr;
@@ -103,7 +124,13 @@ Singleton {
         }
         if (normalized.performance && normalized.performance.mangohud) command = ["mangohud"].concat(command);
         if (normalized.performance && normalized.performance.gamescope) command = ["gamescope", "--"].concat(command);
-        return { command: command, environment: env, workingDirectory: workingDirectory };
+        return {
+            command: command,
+            environment: env,
+            workingDirectory: workingDirectory,
+            runner: normalized.runner,
+            runnerReason: normalized.runnerReason || ""
+        };
     }
 
     /** True once RuntimeManager has confirmed the plain `wine` binary already answers to Wine-Staging, so buildInvocation doesn't reach for a separate wine-staging binary that would just be missing. */
@@ -127,9 +154,15 @@ Singleton {
 
         var app = AppRegistry.byId(appId);
         if (!app || root.isRunning(appId))
-            return;
+            return false;
 
         var inv = root.buildInvocation(app);
+        if (inv.error || !inv.command || inv.command.length === 0) {
+            var launchError = inv.error || "No launch command was resolved.";
+            console.warn("Ricelin: cannot launch", app.name, launchError);
+            Quickshell.execDetached(["notify-send", "-u", "normal", "-a", "Ricelin", "Cannot launch " + app.name, launchError]);
+            return false;
+        }
         var proc = procComponent.createObject(root, {
             command: inv.command,
             environment: inv.environment,
@@ -137,7 +170,7 @@ Singleton {
             running: true
         });
         if (!proc)
-            return;
+            return false;
 
         root._procs[appId] = proc;
         root._stopRequested = Object.assign({}, root._stopRequested, { [appId]: false });
@@ -154,6 +187,7 @@ Singleton {
         }
 
         pidTimer.createObject(root, { appId: appId, proc: proc });
+        return true;
 
         proc.exited.connect(function (exitCode, exitStatus) {
             var launched = root.runningIds[appId];
@@ -226,12 +260,13 @@ Singleton {
     }
 
     // ---- Environment (prefix) actions -------------------------------------
-    function createPrefix(app) { return EnvironmentManager.create(app); }
-    function openPrefixFiles(app) { return EnvironmentManager.openFiles(app); }
-    function runWinetricks(app) { return EnvironmentManager.winetricks(app); }
-    function clonePrefix(app, destPath) { return EnvironmentManager.clone(app, destPath); }
-    function resetPrefix(app) { return EnvironmentManager.reset(app); }
-    function deletePrefix(app) { return EnvironmentManager.remove(app); }
+    // Resolve Auto before invoking the safety helper; it accepts only concrete Wine/UMU runners.
+    function createPrefix(app) { return EnvironmentManager.create(root.effectiveRecord(app)); }
+    function openPrefixFiles(app) { return EnvironmentManager.openFiles(root.effectiveRecord(app)); }
+    function runWinetricks(app) { return EnvironmentManager.winetricks(root.effectiveRecord(app)); }
+    function clonePrefix(app, destPath) { return EnvironmentManager.clone(root.effectiveRecord(app), destPath); }
+    function resetPrefix(app) { return EnvironmentManager.reset(root.effectiveRecord(app)); }
+    function deletePrefix(app) { return EnvironmentManager.remove(root.effectiveRecord(app)); }
 
     // ---- File pickers (zenity, falling back to kdialog) -------------------
 
