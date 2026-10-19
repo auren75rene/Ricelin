@@ -41,15 +41,19 @@ Item {
     readonly property real originY: 24 * s
     readonly property real beadSize: 44 * s
     readonly property real fanStartRadius: 250 * s
-    readonly property real bladeLength: 255 * s
-    /** Rings are kept far enough apart that blades on neighboring arcs cannot collide. */
-    readonly property real ringStep: 68 * s
+    /** Maximum radial distance available on the physical output, in pixels. */
+    property real availableRadius: 1000
+    readonly property real ringGap: 16 * s
     readonly property real bladeHeight: 52 * s
 
     readonly property int count: model ? model.count : 0
-    readonly property int ringCount: Math.max(1, Math.ceil(count / 6))
-    readonly property var placements: Blades.layout(count, 6)
-    readonly property real fanEndRadius: fanStartRadius + bladeLength + (ringCount - 1) * ringStep
+    readonly property var layoutFit: Blades.fitLayout(
+        count, 6, fanStartRadius, availableRadius, 255 * s, ringGap, 64 * s)
+    readonly property int ringCount: layoutFit.ringCount
+    readonly property var placements: layoutFit.placements
+    readonly property real bladeLength: layoutFit.bladeLength
+    readonly property real ringStep: layoutFit.ringStep
+    readonly property real fanEndRadius: layoutFit.outerRadius
     readonly property real sectorSize: fanEndRadius + 24 * s
     /** How far from the origin the pointer still counts as "on the fan". */
     readonly property real reach: sectorSize + 30 * s
