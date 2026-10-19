@@ -1,5 +1,6 @@
 pragma Singleton
 import QtQuick
+import Quickshell
 
 /**
  * Session-only coordination shared by each per-monitor BladeLayer. The app
