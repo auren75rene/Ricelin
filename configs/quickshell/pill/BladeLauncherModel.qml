@@ -493,7 +493,7 @@ QtObject {
         }
     }
 
-    Connections {
+    property Connections appLauncherConnections: Connections {
         target: AppLauncher
         function onLaunchDeferred(appId, message) {
             var id = String(appId);
@@ -532,7 +532,7 @@ QtObject {
         return false;
     }
 
-    Timer {
+    property Timer queueWatcherObject: Timer {
         id: queueWatcher
         interval: root.queuePollMs
         repeat: true
