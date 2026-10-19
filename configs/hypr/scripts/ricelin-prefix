@@ -15,7 +15,7 @@ notice() {
 
 fail() { notice "$*"; exit 1; }
 usage() {
-    echo 'usage: ricelin-prefix <create|reset|remove|open|winetricks|clone> ...' >&2
+    echo 'usage: ricelin-prefix <ensure|create|reset|remove|open|winetricks|clone> ...' >&2
     exit 2
 }
 
@@ -316,7 +316,7 @@ cmd=${1:-}
 shift
 
 case "$cmd" in
-    create|reset|remove|open|winetricks)
+    ensure|create|reset|remove|open|winetricks)
         [ "$#" -eq 4 ] || usage
         raw_path=$1
         runner=$2
@@ -325,6 +325,23 @@ case "$cmd" in
         target=$(canonicalize "$raw_path") || exit 1
         assert_safe_target "$target" "$app_executable" "$app_workdir"
         case "$cmd" in
+            ensure)
+                preflight_runner "$runner"
+                # Idempotent first-launch preparation: reuse a recognized prefix,
+                # initialize an absent/empty destination, and fail closed for any
+                # unrelated populated directory. Never reset data as a side effect.
+                if [ -d "$target" ] && is_prefix_directory "$target"; then
+                    :
+                else
+                    if [ -e "$target" ] || [ -L "$target" ]; then
+                        [ ! -L "$target" ] || fail "Refusing a symlink as the prefix path: $target"
+                        [ -d "$target" ] || fail "Prefix path is not a directory: $target"
+                        is_empty_directory "$target" ||
+                            fail "Refusing to initialize over an unrecognized, non-empty directory: $target"
+                    fi
+                    create_prefix_staged "$target" "$runner"
+                fi
+                ;;
             create)
                 preflight_runner "$runner"
                 create_prefix_staged "$target" "$runner"
