@@ -378,10 +378,17 @@ Item {
             }
         }
         Item { width: 1; height: 10 * root.s }
-        LabeledField { s: root.s; label: "Executable"; text: root.app.executable; browse: "file"; onCommitted: (v) => root.patch({ executable: v }) }
+        LabeledField { s: root.s; label: "Executable"; text: root.app.executable; browse: "file"; onCommitted: (v) => root.patch({ executable: v, needsSetup: false, folderMissing: false }) }
         Item { width: 1; height: 10 * root.s }
         LabeledField { s: root.s; label: "Working directory"; text: root.app.workingDirectory; placeholder: "Auto-detect from executable"; browse: "folder"; onCommitted: (v) => root.patch({ workingDirectory: v }) }
-        Item { width: 1; height: 10 * root.s }
+        Item { width: 1; height: root.effectiveRunner === "steam" ? 10 * root.s : 0; visible: root.effectiveRunner === "steam" }
+        LabeledField {
+            visible: root.effectiveRunner === "steam"
+            s: root.s; label: "Steam App ID"; text: root.app.steamAppId
+            placeholder: "Numeric Steam App ID"
+            onCommitted: (v) => root.patch({ steamAppId: v.trim() })
+        }
+        Item { width: 1; height: root.effectiveRunner === "steam" ? 10 * root.s : 0; visible: root.effectiveRunner === "steam" }
         LabeledField { s: root.s; label: "Prefix / environment"; text: root.app.prefix; browse: "folder"; onCommitted: (v) => root.patch({ prefix: v }) }
         Item { width: 1; height: 8 * root.s }
         Flow {
