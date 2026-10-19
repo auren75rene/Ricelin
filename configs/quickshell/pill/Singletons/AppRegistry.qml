@@ -280,7 +280,7 @@ Singleton {
                     replacement.executable = String(game.executable);
                     replacement.workingDirectory = String(game.workingDirectory || game.gameFolder || source);
                     replacement.needsSetup = false;
-                    if (/\\.exe$/i.test(replacement.executable) && !replacement.prefix)
+                    if (/\.exe$/i.test(replacement.executable) && !replacement.prefix)
                         replacement.prefix = root.dataHome + "/ricelin/prefixes/" + String(old.id);
                 }
                 replacement = root.normalizeRecord(replacement);
@@ -295,7 +295,7 @@ Singleton {
             var id = root.uniqueId(root.slugify(name));
             var executable = String(game.executable || "");
             var candidates = Array.isArray(game.candidateExecutables) ? game.candidateExecutables : [];
-            var hasWindowsCandidate = /\\.exe$/i.test(executable)
+            var hasWindowsCandidate = /\.exe$/i.test(executable)
                 || candidates.some(item => String(item && item.kind || "") === "windows");
             var order = 0;
             for (var k = 0; k < next.length; ++k)
