@@ -20,6 +20,7 @@ Item {
     property bool running: false
     property int pid: 0
     property real startedAt: 0
+    property string launchError: ""
 
     signal back()
     signal launch()
@@ -238,6 +239,16 @@ Item {
             }
         }
 
+        Text {
+            visible: root.launchError.length > 0
+            width: parent.width
+            wrapMode: Text.WordWrap
+            text: "Last launch attempt failed:\n" + root.launchError
+            color: Theme.vermLit
+            font.family: Theme.font
+            font.pixelSize: 10.5 * root.s
+            lineHeight: 1.2
+        }
         Item { width: 1; height: 16 * root.s }
 
         SectionLabel { text: "Telemetry" }

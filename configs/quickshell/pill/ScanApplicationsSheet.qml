@@ -193,7 +193,7 @@ Item {
                                 ? "engineering"
                                 : "utility"
 
-                   found.push(DesktopImport.fromEntry(e, cat))
+                   found.push(DesktopImport.fromEntry(e, cat, Quickshell.env("WINEPREFIX") || ((Quickshell.env("HOME") || "") + "/.wine")))
                 }
 
                 var existingSteamIds =
@@ -256,7 +256,9 @@ Item {
                 ? "Steam"
                 : source === "LUTRIS"
                     ? "Lutris"
-                    : "Desktop"
+                    : source === "WINE_DESKTOP"
+                        ? "Wine launcher"
+                        : "Desktop"
     }
 
     component CandidateRow: Item {
@@ -368,7 +370,9 @@ Item {
                     ? (crow.importable
                         ? "Steam App ID " + crow.modelData.steamAppId
                         : "Steam · needs manual App ID")
-                    : crow.modelData.executable
+                    : crow.modelData.source === "WINE_DESKTOP"
+                        ? (String(crow.modelData.runner || "wine").toUpperCase() + " · " + String(crow.modelData.prefix || "prefix not detected"))
+                        : crow.modelData.executable
 
                 color: crow.importable ? Theme.faint : Theme.subtle
                 font.family: Theme.font
@@ -590,7 +594,7 @@ Item {
 
         Text {
             visible: root.scanning
-            text: "Scanning ~/Games, Steam and Lutris…"
+            text: "Scanning games, Steam, Lutris and installed desktop launchers…"
             color: Theme.faint
             font.family: Theme.font
             font.pixelSize: 11 * root.s
@@ -821,6 +825,8 @@ Item {
                 args: Array.isArray(c.args) ? c.args : [],
                 prefix: c.prefix,
                 steamAppId: c.steamAppId || "",
+                protonBuild: c.protonBuild || "",
+                env: c.env || {},
                 workingDirectory: c.workingDirectory || ""
             })
 

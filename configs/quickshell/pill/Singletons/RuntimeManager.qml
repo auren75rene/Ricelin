@@ -94,7 +94,7 @@ Singleton {
         var steamId = String(app && app.steamAppId ? app.steamAppId : "").trim();
         var executable = String(app && app.executable ? app.executable : "").toLowerCase();
         var desktopEntryId = String(app && app.desktopEntryId ? app.desktopEntryId : "").trim();
-        var windowsTarget = /\.(exe|msi|bat|cmd)$/i.test(executable);
+        var windowsTarget = /\.(exe|lnk|msi|bat|cmd)$/i.test(executable);
 
         if (steamId.length > 0 && root.hasSteam)
             return { runner: "steam", protonBuild: "", reason: "A Steam App ID is configured; launch through Steam so it can use its managed compatibility prefix." };

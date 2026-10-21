@@ -171,6 +171,16 @@ Singleton {
         return root.byCategoryCache[category] || [];
     }
 
+    readonly property var recentApps: {
+        void root.apps;
+        return root.apps.filter(a => Number(a.lastLaunched || 0) > 0 || Number(a.launchCount || 0) > 0)
+            .slice().sort((a, b) => {
+                var byTime = Number(b.lastLaunched || 0) - Number(a.lastLaunched || 0);
+                if (byTime !== 0) return byTime;
+                return Number(b.launchCount || 0) - Number(a.launchCount || 0);
+            });
+    }
+
     function countFor(category) {
         return root.appsFor(category).length;
     }

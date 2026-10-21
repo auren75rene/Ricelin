@@ -37,6 +37,7 @@ Singleton {
     property var pendingStarts: ({}) // appId -> token while prefix preparation is in flight
     property int nextStartToken: 0
     property int _runningGameCount: 0
+    property var launchFailures: ({}) // appId -> last actionable launch/preparation error
 
     signal preparationFailed(string appId, string message)
     signal launchFailed(string appId, string message)
@@ -58,6 +59,22 @@ Singleton {
 
     function isPending(appId) {
         return appId in root.pendingStarts;
+    }
+
+    function failureFor(appId) {
+        return String(root.launchFailures[appId] || "");
+    }
+
+    function setFailure(appId, message) {
+        root.launchFailures = Object.assign({}, root.launchFailures, { [appId]: String(message || "Launch failed.") });
+    }
+
+    function clearFailure(appId) {
+        if (!(appId in root.launchFailures))
+            return;
+        var next = Object.assign({}, root.launchFailures);
+        delete next[appId];
+        root.launchFailures = next;
     }
 
     function cancelPending(appId) {
@@ -157,9 +174,9 @@ Singleton {
         var workingDirectory = DesktopImport.workingDirectoryFor(normalized, desktopEntry);
         var rt = normalized.runtime || {};
         if (normalized.runner === "umu") {
-            env.GAMEID = normalized.umuId && normalized.umuId.length > 0 ? normalized.umuId : ("umu-" + normalized.id);
+            env.GAMEID = env.GAMEID || (normalized.umuId && normalized.umuId.length > 0 ? normalized.umuId : ("umu-" + normalized.id));
             if (normalized.prefix) env.WINEPREFIX = normalized.prefix;
-            env.PROTONPATH = normalized.protonBuild || rt.build || "GE-Proton";
+            env.PROTONPATH = env.PROTONPATH || normalized.protonBuild || rt.build || "GE-Proton";
             command = ["umu-run", normalized.executable].concat(normalized.args || []);
         } else if (normalized.runner === "steam") {
             command = ["steam", "-applaunch", normalized.steamAppId || normalized.id].concat(normalized.args || []);
@@ -221,10 +238,12 @@ Singleton {
         var app = AppRegistry.byId(appId);
         if (!app || root.isRunning(appId) || root.isPending(appId))
             return false;
+        root.clearFailure(appId);
         if (app.needsSetup || app.folderMissing || !String(app.executable || "")) {
             var setupMessage = app.folderMissing
                 ? "The game's folder is missing."
                 : "Choose the game's launch executable before launching it.";
+            root.setFailure(appId, setupMessage);
             Quickshell.execDetached(["notify-send", "-u", "normal", "-a", "Ricelin", "Game needs setup: " + app.name, setupMessage]);
             return false;
         }
@@ -240,6 +259,7 @@ Singleton {
         var inv = root.buildInvocation(app);
         if (inv.error || !inv.command || inv.command.length === 0) {
             var launchError = inv.error || "No launch command was resolved.";
+            root.setFailure(appId, launchError);
             console.warn("Ricelin: cannot launch", app.name, launchError);
             Quickshell.execDetached(["notify-send", "-u", "normal", "-a", "Ricelin", "Cannot launch " + app.name, launchError]);
             return false;
@@ -254,6 +274,7 @@ Singleton {
 
                 if (!ok) {
                     var reason = String(message || "Prefix preparation failed.");
+                    root.setFailure(appId, reason);
                     root.preparationFailed(appId, reason);
                     Quickshell.execDetached(["notify-send", "-u", "normal", "-a", "Ricelin", "Could not prepare " + app.name, reason]);
                     return;
@@ -265,6 +286,7 @@ Singleton {
                 var readyInvocation = root.buildInvocation(current);
                 if (readyInvocation.error || !readyInvocation.command || readyInvocation.command.length === 0) {
                     var reason2 = String(readyInvocation.error || "No launch command was resolved after prefix setup.");
+                    root.setFailure(appId, reason2);
                     root.launchFailed(appId, reason2);
                     Quickshell.execDetached(["notify-send", "-u", "normal", "-a", "Ricelin", "Cannot launch " + current.name, reason2]);
                     return;
@@ -296,8 +318,10 @@ Singleton {
             workingDirectory: inv.workingDirectory,
             running: true
         });
-        if (!proc)
+        if (!proc) {
+            root.setFailure(appId, "Quickshell could not create the launch process.");
             return false;
+        }
 
         root._procs[appId] = proc;
         root._stopRequested = Object.assign({}, root._stopRequested, { [appId]: false });
@@ -331,6 +355,7 @@ Singleton {
                     detail = detail.slice(0, 417) + "...";
                 console.warn("Ricelin: application exited with status", exitCode, app.name, detail);
                 if (elapsedMs < 5000) {
+                    root.setFailure(appId, detail);
                     root.launchFailed(appId, detail);
                     Quickshell.execDetached(["notify-send", "-u", "normal", "-a", "Ricelin", "Could not start " + app.name, detail]);
                 }

@@ -36,6 +36,68 @@ assert.equal(steam.steamAppId, "620");
 assert.equal(steam.executable, "");
 console.log("  ok   Steam desktop entry retains its app ID");
 
+const wineDesktop = context.fromEntry({
+    id: "wine-Programs-HiToolsDelivery.desktop",
+    name: "HiToolsDelivery",
+    execString: 'env "WINEPREFIX=/home/example/.wine-hitools" wine "C:\\\\ProgramData\\\\HiToolsDelivery\\\\HiToolsDelivery.lnk"',
+    command: ["env", "WINEPREFIX=/home/example/.wine-hitools", "wine", "C:\\ProgramData\\HiToolsDelivery\\HiToolsDelivery.lnk"]
+}, "utility");
+assert.equal(wineDesktop.source, "WINE_DESKTOP");
+assert.equal(wineDesktop.runner, "wine");
+assert.equal(wineDesktop.executable, "C:\\ProgramData\\HiToolsDelivery\\HiToolsDelivery.lnk");
+assert.equal(wineDesktop.prefix, "/home/example/.wine-hitools");
+assert.deepEqual(Array.from(wineDesktop.args), []);
+assert.equal(wineDesktop.desktopEntryId, "wine-Programs-HiToolsDelivery.desktop");
+console.log("  ok   Wine desktop entry imports its real target and existing prefix");
+
+const stagingDesktop = context.fromEntry({
+    id: "wine-Programs-OldTool.desktop",
+    name: "OldTool",
+    execString: 'env "WINEPREFIX=/tmp/oldtool-prefix" wine-staging "C:\\\\OldTool\\\\OldTool.exe" --safe',
+    command: ["env", "WINEPREFIX=/tmp/oldtool-prefix", "wine-staging", "C:\\OldTool\\OldTool.exe", "--safe"]
+}, "utility");
+assert.equal(stagingDesktop.runner, "wine-staging");
+assert.equal(stagingDesktop.executable, "C:\\OldTool\\OldTool.exe");
+assert.equal(stagingDesktop.prefix, "/tmp/oldtool-prefix");
+assert.deepEqual(Array.from(stagingDesktop.args), ["--safe"]);
+console.log("  ok   Wine-Staging desktop entry keeps runner and arguments");
+
+const umuDesktop = context.fromEntry({
+    id: "umu-Programs-Game.desktop",
+    name: "Game",
+    execString: 'env "WINEPREFIX=/tmp/game-prefix" "GAMEID=umu-game" umu-run "Z:\\\\games\\\\game.exe"',
+    command: ["env", "WINEPREFIX=/tmp/game-prefix", "GAMEID=umu-game", "umu-run", "Z:\\games\\game.exe"]
+}, "game");
+assert.equal(umuDesktop.runner, "umu");
+assert.equal(umuDesktop.prefix, "/tmp/game-prefix");
+assert.equal(umuDesktop.env.GAMEID, "umu-game");
+assert.equal(umuDesktop.executable, "Z:\\games\\game.exe");
+console.log("  ok   UMU desktop entry imports its prefix and environment");
+
+const defaultWine = context.fromEntry({
+    id: "wine-Programs-Standalone.desktop",
+    name: "Standalone",
+    execString: 'wine "C:\\\\Tools\\\\Standalone.exe"',
+    command: ["wine", "C:\\Tools\\Standalone.exe"]
+}, "utility", "/home/example/.wine");
+assert.equal(defaultWine.source, "WINE_DESKTOP");
+assert.equal(defaultWine.runner, "wine");
+assert.equal(defaultWine.prefix, "/home/example/.wine");
+assert.equal(defaultWine.executable, "C:\\Tools\\Standalone.exe");
+assert.equal(context.workingDirectoryFor(defaultWine, null), "");
+console.log("  ok   Wine desktop entries without WINEPREFIX use the supplied default prefix");
+
+const wineHandler = context.fromEntry({
+    id: "wine-extension-chm.desktop",
+    name: "CHM handler",
+    execString: 'env "WINEPREFIX=/home/example/.wine" wine start /ProgIDOpen "chm.file"',
+    command: ["env", "WINEPREFIX=/home/example/.wine", "wine", "start", "/ProgIDOpen", "chm.file"]
+}, "utility");
+assert.equal(wineHandler.runner, "native");
+assert.equal(wineHandler.executable, "env");
+assert.deepEqual(Array.from(wineHandler.args), ["WINEPREFIX=/home/example/.wine", "wine", "start", "/ProgIDOpen", "chm.file"]);
+console.log("  ok   Wine file-association handlers retain their original argv");
+
 const empty = context.fromEntry({ id: "empty.desktop", name: "Empty", execString: "", command: [] }, "utility");
 assert.equal(empty.executable, "");
 assert.deepEqual(Array.from(empty.args), []);
