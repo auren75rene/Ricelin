@@ -116,8 +116,11 @@ Singleton {
                 var message = String(ensureStderr.text || ensureStdout.text || "").trim();
                 var callback = ensureProc.finishedCallback;
                 ensureProc.finishedCallback = null;
-                if (callback)
+                if (callback) {
+                    if (exitCode === 0)
+                        root.refreshPrefixes();
                     callback(exitCode === 0, message);
+                }
                 ensureProc.destroy();
             }
         }

@@ -193,7 +193,7 @@ Item {
                                 ? "engineering"
                                 : "utility"
 
-                   found.push(DesktopImport.fromEntry(e, cat))
+                   found.push(DesktopImport.fromEntry(e, cat, Quickshell.env("WINEPREFIX") || ((Quickshell.env("HOME") || "") + "/.wine")))
                 }
 
                 var existingSteamIds =

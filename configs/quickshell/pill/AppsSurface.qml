@@ -38,7 +38,7 @@ PillSurface {
         if (idx < 0) idx = 0;
         idx = Math.max(0, Math.min(cats.length - 1, idx + delta));
         root.category = cats[idx].id;
-        appsList.currentIndex = AppRegistry.countFor(root.category) > 0 ? 0 : -1;
+        appsList.currentIndex = root.appsForView(root.category).length > 0 ? 0 : -1;
     }
 
     Column {
@@ -227,6 +227,7 @@ PillSurface {
            running: AppLauncher.isRunning(root.selectedId)
            pid: AppLauncher.pidFor(root.selectedId)
            startedAt: AppLauncher.startedAt(root.selectedId)
+           launchError: AppLauncher.failureFor(root.selectedId)
 
            onBack: root.viewState = "list"
            onEditRequested: root.viewState = "editor"

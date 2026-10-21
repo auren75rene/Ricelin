@@ -74,6 +74,18 @@ assert.equal(umuDesktop.env.GAMEID, "umu-game");
 assert.equal(umuDesktop.executable, "Z:\\games\\game.exe");
 console.log("  ok   UMU desktop entry imports its prefix and environment");
 
+const defaultWine = context.fromEntry({
+    id: "wine-Programs-Standalone.desktop",
+    name: "Standalone",
+    execString: 'wine "C:\\\\Tools\\\\Standalone.exe"',
+    command: ["wine", "C:\\Tools\\Standalone.exe"]
+}, "utility", "/home/example/.wine");
+assert.equal(defaultWine.source, "WINE_DESKTOP");
+assert.equal(defaultWine.runner, "wine");
+assert.equal(defaultWine.prefix, "/home/example/.wine");
+assert.equal(defaultWine.executable, "C:\\Tools\\Standalone.exe");
+console.log("  ok   Wine desktop entries without WINEPREFIX use the supplied default prefix");
+
 const wineHandler = context.fromEntry({
     id: "wine-extension-chm.desktop",
     name: "CHM handler",

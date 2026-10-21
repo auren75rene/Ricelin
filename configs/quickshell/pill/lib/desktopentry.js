@@ -115,7 +115,7 @@ function wineLaunchDetails(entry, command) {
         if (rawPrefix)
             prefix = rawPrefix[1] || rawPrefix[2] || rawPrefix[3] || "";
     }
-    if (!prefix || runnerAt < 0)
+    if (runnerAt < 0)
         return null;
 
     for (var e = 0; e < runnerAt; ++e) {
@@ -151,7 +151,7 @@ function wineLaunchDetails(entry, command) {
     };
 }
 
-function fromEntry(entry, category) {
+function fromEntry(entry, category, defaultWinePrefix) {
     var command = [];
     if (entry && entry.command && entry.command.length > 0) {
         for (var i = 0; i < entry.command.length; ++i)
@@ -170,7 +170,7 @@ function fromEntry(entry, category) {
         args: isSteam ? [] : (wineLaunch ? wineLaunch.args : command.slice(1)),
         desktopEntryId: String(entry && entry.id || ""),
         workingDirectory: String(entry && entry.workingDirectory || ""),
-        prefix: wineLaunch ? wineLaunch.prefix : "",
+        prefix: wineLaunch ? (wineLaunch.prefix || String(defaultWinePrefix || "")) : "",
         env: wineLaunch ? wineLaunch.env : {},
         protonBuild: wineLaunch ? wineLaunch.protonBuild : "",
         category: category,
