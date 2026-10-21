@@ -84,6 +84,7 @@ assert.equal(defaultWine.source, "WINE_DESKTOP");
 assert.equal(defaultWine.runner, "wine");
 assert.equal(defaultWine.prefix, "/home/example/.wine");
 assert.equal(defaultWine.executable, "C:\\Tools\\Standalone.exe");
+assert.equal(context.workingDirectoryFor(defaultWine, null), "");
 console.log("  ok   Wine desktop entries without WINEPREFIX use the supplied default prefix");
 
 const wineHandler = context.fromEntry({

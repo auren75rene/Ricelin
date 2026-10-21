@@ -67,6 +67,11 @@ function workingDirectoryFor(app, entry) {
         return fromEntry
 
     var executable = String(app && app.executable || "")
+    // Windows targets have drive-letter/backslash paths, which are not valid
+    // Linux working directories. Defer to an explicit desktop-entry Path or
+    // leave cwd unspecified so Wine keeps its normal launch semantics.
+    if (/\.(exe|lnk|msi|bat|cmd)$/i.test(executable) || /^[a-z]:[\\/]/i.test(executable))
+        return ""
     var i = executable.lastIndexOf("/")
     return i > 0 ? executable.slice(0, i) : executable
 }
