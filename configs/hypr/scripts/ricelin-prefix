@@ -15,7 +15,7 @@ notice() {
 
 fail() { notice "$*"; exit 1; }
 usage() {
-    echo 'usage: ricelin-prefix <ensure|create|reset|remove|open|winetricks|clone> ...' >&2
+    echo 'usage: ricelin-prefix <list|ensure|create|reset|remove|open|winetricks|clone> ...' >&2
     exit 2
 }
 
@@ -311,11 +311,92 @@ remove_prefix() {
     rm -rf -- "$directory" || fail "Could not remove prefix: $directory"
 }
 
+list_prefixes() {
+    [ "$#" -eq 0 ] || usage
+    have python3 || fail 'python3 is required to list existing prefixes.'
+    # Search only common Wine, Ricelin, Steam, Lutris, and game-prefix locations.
+    # Never recursively scan the user's entire home directory.
+    set -- \
+        "$HOME/.wine" "$HOME"/.wine-* "$HOME"/.wine_* \
+        "$HOME"/.local/share/wineprefixes/* \
+        "$HOME"/.local/share/ricelin/prefixes/* \
+        "$HOME"/.local/share/Steam/steamapps/compatdata/*/pfx \
+        "$HOME"/.steam/steam/steamapps/compatdata/*/pfx \
+        "$HOME"/.steam/root/steamapps/compatdata/*/pfx \
+        "$HOME"/.var/app/com.valvesoftware.Steam/data/Steam/steamapps/compatdata/*/pfx \
+        "$HOME"/.local/share/lutris/prefixes/* \
+        "$HOME"/Desktop/*/wineprefix "$HOME"/Desktop/*/prefix \
+        "$HOME"/Games/*/prefix "$HOME"/Games/*/pfx "$HOME"/Games/*/proton-prefix
+
+    python3 - "$@" <<'PYLIST'
+import json
+import os
+import sys
+
+home = os.path.abspath(os.environ.get("HOME", ""))
+results = []
+seen = set()
+
+for raw in sys.argv[1:]:
+    if not raw or not os.path.isdir(raw) or os.path.islink(raw):
+        continue
+    path = os.path.abspath(raw)
+    if path in seen:
+        continue
+    seen.add(path)
+
+    if not (
+        os.path.isdir(os.path.join(path, "drive_c"))
+        and os.path.isdir(os.path.join(path, "dosdevices"))
+        and os.path.isfile(os.path.join(path, "system.reg"))
+        and os.path.isfile(os.path.join(path, "user.reg"))
+    ):
+        continue
+
+    marker = os.path.join(path, ".ricelin-prefix")
+    managed = False
+    if os.path.isfile(marker) and not os.path.islink(marker):
+        try:
+            with open(marker, "r", encoding="utf-8", errors="replace") as stream:
+                managed = stream.read().strip() == "Ricelin-managed Wine/Proton prefix"
+        except OSError:
+            pass
+
+    normalized = path.replace(os.sep, "/")
+    is_steam = "/steamapps/compatdata/" in normalized and os.path.basename(path) == "pfx"
+    name = os.path.basename(path.rstrip(os.sep)) or path
+    if path == os.path.join(home, ".wine"):
+        label = "Default Wine prefix — " + path
+    elif is_steam:
+        appid = os.path.basename(os.path.dirname(path))
+        label = "Steam/Proton " + appid + " — " + path
+    elif managed:
+        label = "Ricelin-managed " + name + " — " + path
+    else:
+        label = name + " — " + path
+
+    results.append({
+        "name": name,
+        "path": path,
+        "label": label,
+        "managed": managed,
+        "kind": "steam" if is_steam else ("ricelin" if managed else "existing")
+    })
+
+results.sort(key=lambda item: (item["name"].lower(), item["path"].lower()))
+json.dump(results, sys.stdout, ensure_ascii=False)
+sys.stdout.write("\n")
+PYLIST
+}
+
 cmd=${1:-}
 [ "$#" -gt 0 ] || usage
 shift
 
 case "$cmd" in
+    list)
+        list_prefixes "$@"
+        ;;
     ensure|create|reset|remove|open|winetricks)
         [ "$#" -eq 4 ] || usage
         raw_path=$1

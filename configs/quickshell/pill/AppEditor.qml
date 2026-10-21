@@ -390,11 +390,32 @@ Item {
         }
         Item { width: 1; height: root.effectiveRunner === "steam" ? 10 * root.s : 0; visible: root.effectiveRunner === "steam" }
         LabeledField { s: root.s; label: "Prefix / environment"; text: root.app.prefix; browse: "folder"; onCommitted: (v) => root.patch({ prefix: v }) }
+        SettingsRow {
+            visible: root.canManageWinePrefix
+            name: "Use existing prefix"
+            sub: "Choose a detected Wine/Proton environment without browsing for its path."
+            control: ComboBox {
+                width: 205 * root.s
+                model: EnvironmentManager.prefixOptions(root.app.prefix)
+                textRole: "label"
+                valueRole: "path"
+                currentIndex: {
+                    var options = EnvironmentManager.prefixOptions(root.app.prefix)
+                    for (var i = 0; i < options.length; ++i)
+                        if (String(options[i].path || "") === String(root.app.prefix || ""))
+                            return i
+                    return -1
+                }
+                onActivated: (index) => root.patch({ prefix: currentValue })
+            }
+        }
         Item { width: 1; height: 8 * root.s }
         Flow {
             width: parent.width
             spacing: 6 * root.s
             TextButton { visible: root.canManageWinePrefix; label: "Create"; onClicked: AppLauncher.createPrefix(root.app) }
+            TextButton { visible: root.canManageWinePrefix; label: "Dedicated"; onClicked: root.patch({ prefix: AppRegistry.dataHome + "/ricelin/prefixes/" + root.app.id }) }
+            TextButton { visible: root.canManageWinePrefix; label: "Refresh prefixes"; onClicked: EnvironmentManager.refreshPrefixes() }
             TextButton { visible: root.canManageWinePrefix; label: "Clone…"; onClicked: AppLauncher.pickFolder((p) => { if (p) AppLauncher.clonePrefix(root.app, p); }) }
             TextButton {
                 visible: root.canManageWinePrefix

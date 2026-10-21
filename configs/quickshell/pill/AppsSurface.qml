@@ -28,8 +28,12 @@ PillSurface {
         appsList.currentIndex = next;
         appsList.positionViewAtIndex(next, ListView.Contain);
     }
+    function appsForView(categoryId) {
+        return categoryId === "recent" ? AppRegistry.recentApps : AppRegistry.appsFor(categoryId);
+    }
+
     function changeCategory(delta) {
-        var cats = AppRegistry.categories;
+        var cats = AppRegistry.categories.concat([{ id: "recent", label: "Recent" }]);
         var idx = cats.findIndex(c => c.id === root.category);
         if (idx < 0) idx = 0;
         idx = Math.max(0, Math.min(cats.length - 1, idx + delta));
@@ -49,7 +53,7 @@ PillSurface {
            Text {
                anchors.left: parent.left
                anchors.verticalCenter: parent.verticalCenter
-               text: AppRegistry.categoryLabel(root.category)
+               text: root.category === "recent" ? "Recently used" : AppRegistry.categoryLabel(root.category)
                color: Theme.cream
                font.family: Theme.font
                font.pixelSize: 13 * root.s
@@ -116,9 +120,9 @@ PillSurface {
            width: parent.width
            visible: root.viewState === "list"
            s: root.s
-            options: [ { label: "Games", value: "game" }, { label: "Dev", value: "development" }, { label: "Eng", value: "engineering" }, { label: "Tools", value: "utility" } ]
+            options: [ { label: "Games", value: "game" }, { label: "Dev", value: "development" }, { label: "Eng", value: "engineering" }, { label: "Tools", value: "utility" }, { label: "Recent", value: "recent" } ]
             value: root.category
-            onPicked: (v) => { root.category = v; appsList.currentIndex = AppRegistry.countFor(v) > 0 ? 0 : -1; }
+            onPicked: (v) => { root.category = v; appsList.currentIndex = root.appsForView(v).length > 0 ? 0 : -1; }
         }
         Item { width: 1; height: visible ? 10 * root.s : 0; visible: root.viewState === "list" }
        Column {
@@ -156,7 +160,9 @@ PillSurface {
            width: parent.width
            visible: root.viewState === "list" && AppRegistry.ready && !AppRegistry.loadError && appsList.count === 0
            wrapMode: Text.WordWrap
-           text: "Nothing here yet. Use + to add an application, or Scan to discover installed ones."
+           text: root.category === "recent"
+               ? "No launch history has been recorded by Ricelin yet. Use Scan to import installed applications, then pin any app from its editor."
+               : "Nothing here yet. Use + to add an application, or Scan to discover installed ones."
            color: Theme.faint
            font.family: Theme.font
            font.pixelSize: 11 * root.s
@@ -174,7 +180,7 @@ PillSurface {
             activeFocusOnTab: true
             keyNavigationEnabled: true
             keyNavigationWraps: false
-            model: visible ? AppRegistry.appsFor(root.category) : []
+            model: visible ? root.appsForView(root.category) : []
             onVisibleChanged: if (visible) { if (currentIndex < 0 && count > 0) currentIndex = 0; forceActiveFocus(); }
             onCurrentIndexChanged: if (currentIndex >= 0) positionViewAtIndex(currentIndex, ListView.Contain)
             Keys.onPressed: event => {
@@ -190,7 +196,7 @@ PillSurface {
                 app: modelData
                s: root.s
                revealIndex: index
-                last: index === AppRegistry.appsFor(root.category).length - 1
+                last: index === root.appsForView(root.category).length - 1
                 selected: index === appsList.currentIndex
                 running: AppLauncher.isRunning(modelData.id)
                 onActivated: {

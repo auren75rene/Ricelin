@@ -8,6 +8,37 @@ Singleton {
 
     readonly property string configDir: Quickshell.env("XDG_CONFIG_HOME") || ((Quickshell.env("HOME") || "") + "/.config")
     readonly property string prefixHelper: root.configDir + "/hypr/scripts/ricelin-prefix"
+    property var knownPrefixes: []
+
+    function refreshPrefixes() {
+        if (!prefixScanProc.running)
+            prefixScanProc.running = true
+    }
+
+    function prefixOptions(currentPath) {
+        var current = String(currentPath || "")
+        var options = []
+        var foundCurrent = false
+        for (var i = 0; i < root.knownPrefixes.length; ++i) {
+            var item = root.knownPrefixes[i]
+            if (String(item.path || "") === current) {
+                options.push(item)
+                foundCurrent = true
+                break
+            }
+        }
+        if (current.length > 0 && !foundCurrent) {
+            var bits = current.split("/")
+            var name = bits[bits.length - 1] || current
+            options.push({ name: name, path: current, label: "Current/custom — " + current, managed: false, kind: "current" })
+        }
+        for (var j = 0; j < root.knownPrefixes.length; ++j) {
+            var candidate = root.knownPrefixes[j]
+            if (String(candidate.path || "") !== current)
+                options.push(candidate)
+        }
+        return options
+    }
 
     function runManagedAction(action, app, destination) {
         var prefix = app && app.prefix ? String(app.prefix) : "";
@@ -114,5 +145,34 @@ Singleton {
 
     function remove(app) {
         return root.runManagedAction("remove", app, "");
+    }
+
+    Component.onCompleted: root.refreshPrefixes()
+
+    Process {
+        id: prefixScanProc
+        command: ["sh", root.prefixHelper, "list"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    var result = JSON.parse(String(this.text || "[]"))
+                    root.knownPrefixes = Array.isArray(result) ? result : []
+                } catch (e) {
+                    root.knownPrefixes = []
+                    console.warn("Ricelin: could not parse the prefix inventory:", String(e))
+                }
+            }
+        }
+        stderr: StdioCollector {
+            onStreamFinished: {
+                var message = String(this.text || "").trim()
+                if (message.length > 0)
+                    console.warn("Ricelin prefix inventory:", message)
+            }
+        }
+        onExited: function(exitCode) {
+            if (exitCode !== 0)
+                console.warn("Ricelin: prefix inventory exited with status", exitCode)
+        }
     }
 }

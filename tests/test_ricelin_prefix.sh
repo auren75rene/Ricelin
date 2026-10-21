@@ -59,6 +59,17 @@ expect_ok 'creates a new Wine prefix and marks it' create "$prefix" wine "$exe" 
 [ -f "$prefix/system.reg" ] || bad 'wineboot was not invoked'
 ok 'new Wine prefix initialized'
 
+listed=$(HOME="$home" PATH="$bin:$original_path" RICELIN_PREFIX_NO_NOTIFY=1 sh "$helper" list)
+RICELIN_PREFIX_LIST="$listed" RICELIN_EXPECTED_PREFIX="$prefix" python3 -c '
+import json, os
+items = json.loads(os.environ["RICELIN_PREFIX_LIST"])
+expected = os.environ["RICELIN_EXPECTED_PREFIX"]
+assert any(item["path"] == expected for item in items), "created prefix missing from inventory"
+assert any(item["path"] == expected and item["managed"] for item in items), "managed prefix not labeled"
+assert not any(item["path"].endswith("/Downloads") for item in items), "unrelated directory leaked into inventory"
+'
+ok 'list discovers valid prefixes and excludes unrelated directories'
+
 # ensure is the non-destructive first-launch path: reuse valid prefixes, create
 # absent/empty ones, and fail closed for unrelated populated directories.
 printf 'user data survives ensure\n' > "$prefix/user-data-sentinel"

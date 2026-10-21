@@ -33,6 +33,9 @@ Item {
     property bool nameTouched: false
     property bool prefixTouched: false
     property bool applyingExecutablePick: false
+    readonly property string effectiveRunner: root.runner === "auto"
+        ? RuntimeManager.recommend({ category: root.category, graphicsApi: "unknown", executable: root.executable }).runner
+        : root.runner
 
     readonly property bool canAdd: root.name.trim().length > 0 && root.executable.trim().length > 0
 
@@ -224,6 +227,31 @@ Item {
             browse: "folder"
             last: true
             onTextChanged: { root.prefix = text; if (!root.applyingExecutablePick && text.length > 0) root.prefixTouched = true; }
+        }
+        SettingsRow {
+            visible: ["wine", "wine-staging", "umu"].indexOf(root.effectiveRunner) >= 0
+            name: "Use existing prefix"
+            sub: "Select a detected environment or keep this app's dedicated prefix."
+            control: ComboBox {
+                width: 205 * root.s
+                model: EnvironmentManager.prefixOptions(root.prefix)
+                textRole: "label"
+                valueRole: "path"
+                currentIndex: {
+                    var options = EnvironmentManager.prefixOptions(root.prefix)
+                    for (var i = 0; i < options.length; ++i)
+                        if (String(options[i].path || "") === String(root.prefix || ""))
+                            return i
+                    return -1
+                }
+                onActivated: (index) => { root.prefix = currentValue; root.prefixTouched = true; }
+            }
+        }
+        Row {
+            visible: ["wine", "wine-staging", "umu"].indexOf(root.effectiveRunner) >= 0
+            spacing: 6 * root.s
+            TextButton { label: "Refresh prefixes"; onClicked: EnvironmentManager.refreshPrefixes() }
+            TextButton { label: "Dedicated"; onClicked: { root.prefix = root.defaultPrefixPath(root.name); root.prefixTouched = true; } }
         }
 
         Item { width: 1; height: 18 * root.s }
