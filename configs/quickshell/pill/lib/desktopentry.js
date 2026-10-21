@@ -71,27 +71,110 @@ function workingDirectoryFor(app, entry) {
     return i > 0 ? executable.slice(0, i) : executable
 }
 
-function fromEntry(entry, category) {
-    var command = []
-    if (entry && entry.command && entry.command.length > 0) {
-        for (var i = 0; i < entry.command.length; ++i)
-            command.push(String(entry.command[i]))
+function isWindowsTarget(value) {
+    var text = String(value || "").trim();
+    return /\.(exe|lnk|msi|bat|cmd)$/i.test(text) || /^[a-z]:[\\/]/i.test(text);
+}
+
+function wineLaunchDetails(entry, command) {
+    var prefix = "";
+    var runner = "";
+    var runnerAt = -1;
+    var environment = ({});
+
+    // Inspect Quickshell's parsed argv. Never pass desktop Exec text through a shell.
+    for (var i = 0; i < command.length; ++i) {
+        var token = String(command[i] || "");
+        var assignment = token.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
+        if (assignment && assignment[1].toUpperCase() === "WINEPREFIX")
+            prefix = assignment[2].replace(/^["']|["']$/g, "");
+
+        var binary = token.replace(/\\/g, "/").split("/").pop().toLowerCase();
+        if (binary === "umu-run") {
+            runner = "umu";
+            runnerAt = i;
+            break;
+        }
+        if (binary === "wine-staging" || binary === "wine-staging64") {
+            runner = "wine-staging";
+            runnerAt = i;
+            break;
+        }
+        if (binary === "wine" || binary === "wine64") {
+            runner = "wine";
+            runnerAt = i;
+            break;
+        }
     }
 
-    var steamAppId = steamAppIdFromExec(entry && entry.execString)
-    var isSteam = steamAppId.length > 0
+    // Some providers expose environment assignments only in Exec text.
+    // This extracts metadata; the command itself still comes from parsed argv.
+    if (!prefix) {
+        var rawPrefix = String(entry && entry.execString || "")
+            .match(/WINEPREFIX=(?:"([^"]+)"|'([^']+)'|([^\s"]+))/i);
+        if (rawPrefix)
+            prefix = rawPrefix[1] || rawPrefix[2] || rawPrefix[3] || "";
+    }
+    if (!prefix || runnerAt < 0)
+        return null;
+
+    for (var e = 0; e < runnerAt; ++e) {
+        var envMatch = String(command[e] || "").match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
+        if (!envMatch || envMatch[1].toUpperCase() === "WINEPREFIX")
+            continue;
+        environment[envMatch[1]] = envMatch[2];
+    }
+
+    var targetAt = -1;
+    for (var j = runnerAt + 1; j < command.length; ++j) {
+        if (isWindowsTarget(command[j])) {
+            targetAt = j;
+            break;
+        }
+    }
+
+    // File-association handlers such as wine start /ProgIDOpen are not app targets.
+    if (targetAt < 0)
+        return null;
+
+    var args = [];
+    for (var a = targetAt + 1; a < command.length; ++a)
+        args.push(String(command[a]));
 
     return {
-        source: isSteam ? "STEAM" : "DESKTOP",
+        runner: runner,
+        executable: String(command[targetAt]),
+        args: args,
+        prefix: prefix,
+        env: environment,
+        protonBuild: environment.PROTONPATH || ""
+    };
+}
+
+function fromEntry(entry, category) {
+    var command = [];
+    if (entry && entry.command && entry.command.length > 0) {
+        for (var i = 0; i < entry.command.length; ++i)
+            command.push(String(entry.command[i]));
+    }
+
+    var steamAppId = steamAppIdFromExec(entry && entry.execString);
+    var isSteam = steamAppId.length > 0;
+    var wineLaunch = isSteam ? null : wineLaunchDetails(entry, command);
+
+    return {
+        source: isSteam ? "STEAM" : (wineLaunch ? "WINE_DESKTOP" : "DESKTOP"),
         discoverySource: "DESKTOP",
         name: String(entry && entry.name || ""),
-        executable: isSteam ? "" : (command.length > 0 ? command[0] : ""),
-        args: isSteam ? [] : command.slice(1),
+        executable: isSteam ? "" : (wineLaunch ? wineLaunch.executable : (command.length > 0 ? command[0] : "")),
+        args: isSteam ? [] : (wineLaunch ? wineLaunch.args : command.slice(1)),
         desktopEntryId: String(entry && entry.id || ""),
         workingDirectory: String(entry && entry.workingDirectory || ""),
-        prefix: "",
+        prefix: wineLaunch ? wineLaunch.prefix : "",
+        env: wineLaunch ? wineLaunch.env : {},
+        protonBuild: wineLaunch ? wineLaunch.protonBuild : "",
         category: category,
-        runner: isSteam ? "steam" : "native",
+        runner: isSteam ? "steam" : (wineLaunch ? wineLaunch.runner : "native"),
         steamAppId: steamAppId
-    }
+    };
 }

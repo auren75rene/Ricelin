@@ -157,9 +157,9 @@ Singleton {
         var workingDirectory = DesktopImport.workingDirectoryFor(normalized, desktopEntry);
         var rt = normalized.runtime || {};
         if (normalized.runner === "umu") {
-            env.GAMEID = normalized.umuId && normalized.umuId.length > 0 ? normalized.umuId : ("umu-" + normalized.id);
+            env.GAMEID = env.GAMEID || (normalized.umuId && normalized.umuId.length > 0 ? normalized.umuId : ("umu-" + normalized.id));
             if (normalized.prefix) env.WINEPREFIX = normalized.prefix;
-            env.PROTONPATH = normalized.protonBuild || rt.build || "GE-Proton";
+            env.PROTONPATH = env.PROTONPATH || normalized.protonBuild || rt.build || "GE-Proton";
             command = ["umu-run", normalized.executable].concat(normalized.args || []);
         } else if (normalized.runner === "steam") {
             command = ["steam", "-applaunch", normalized.steamAppId || normalized.id].concat(normalized.args || []);
