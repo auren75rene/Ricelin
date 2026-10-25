@@ -97,7 +97,8 @@ Item {
         id: scanProc
         command: ["python3", AppRegistry.gameDiscovery,
                   "--home", Quickshell.env("HOME") || "",
-                  "--root", AppRegistry.gamesDirectory]
+                  "--root", AppRegistry.gamesDirectory,
+                  "--registry", AppRegistry.path]
 
         stdout: StdioCollector {
             onStreamFinished: {

@@ -99,8 +99,15 @@ class DiscoveryTests(unittest.TestCase):
 
     def test_malformed_registry_reported(self):
         (self.home / ".config/ricelin/applications.json").write_text("{broken")
-        status = mod.discover(self.home)["registry"]
+        status = mod.discover(self.home, registry_path=self.home / ".config/ricelin/applications.json")["registry"]
         self.assertTrue(status["exists"]); self.assertTrue(status["error"])
+
+    def test_explicit_registry_path_is_respected(self):
+        registry = self.home / "custom-config/ricelin/applications.json"
+        registry.parent.mkdir(parents=True); registry.write_text("[]\\n")
+        report = mod.discover(self.home, registry_path=registry)
+        self.assertEqual(report["registry"]["path"], str(registry.resolve()))
+        self.assertTrue(report["registry"]["exists"])
 
     def test_legacy_index_is_adapter_to_shared_backend(self):
         folder = self.home / "Games/Example"; folder.mkdir(); (folder / "Example.exe").touch()

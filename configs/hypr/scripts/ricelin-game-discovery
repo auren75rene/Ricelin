@@ -339,9 +339,15 @@ def load_registry(path: Path) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     if status["format"] == "unsupported-json": status["error"] = "applications.json must contain an array of objects"
     return entries, status
 
-def discover(home: Path, games_root: Path | None = None) -> dict[str, Any]:
-    home = home.expanduser().resolve(strict=False); games_root = (games_root or home / "Games").expanduser().resolve(strict=False)
-    entries, status = load_registry(home / ".config/ricelin/applications.json")
+def discover(home: Path, games_root: Path | None = None,
+             registry_path: Path | None = None) -> dict[str, Any]:
+    home = home.expanduser().resolve(strict=False)
+    games_root = (games_root or home / "Games").expanduser().resolve(strict=False)
+    if registry_path is None:
+        xdg_config = os.environ.get("XDG_CONFIG_HOME", "").strip()
+        config_home = Path(xdg_config).expanduser() if xdg_config else home / ".config"
+        registry_path = config_home / "ricelin/applications.json"
+    entries, status = load_registry(registry_path.expanduser())
     prefixes = find_prefixes(home, games_root)
     games = deduplicate(steam_candidates(home) + local_game_candidates(home, prefixes, games_root) + desktop_candidates(home, prefixes) + lutris_candidates(home))
     for game in games:
@@ -360,8 +366,10 @@ def discover(home: Path, games_root: Path | None = None) -> dict[str, Any]:
        "Only user-scoped desktop-entry directories are inspected; /usr/share/applications is excluded.",
        "Local executable selection is heuristic; review candidates before import."]}
 
-def legacy_index(root: Path) -> dict[str, Any]:
-    root = root.expanduser().resolve(strict=False); report = discover(root.parent, root); games = []
+def legacy_index(root: Path, registry_path: Path | None = None) -> dict[str, Any]:
+    root = root.expanduser().resolve(strict=False)
+    report = discover(root.parent, root, registry_path)
+    games = []
     for game in report["games"]:
         if game.get("source") != "local-directory": continue
         exe = str(game.get("executable") or ""); kind = "windows" if exe.casefold().endswith(".exe") else "native"
@@ -379,10 +387,12 @@ def scan(root: Path) -> dict[str, Any]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--home", type=Path, default=Path.home()); parser.add_argument("--root", type=Path)
+    parser.add_argument("--registry", type=Path,
+        help="explicit applications.json path (defaults to XDG_CONFIG_HOME/ricelin/applications.json)")
     parser.add_argument("--format", choices=("inventory", "legacy-index"), default="inventory")
     parser.add_argument("--pretty", action="store_true"); args = parser.parse_args(argv)
     try:
-        result = legacy_index(args.root or (args.home / "Games")) if args.format == "legacy-index" else discover(args.home, args.root)
+        result = legacy_index(args.root or (args.home / "Games"), args.registry) if args.format == "legacy-index" else discover(args.home, args.root, args.registry)
         json.dump(result, sys.stdout, indent=2 if args.pretty else None, ensure_ascii=False); sys.stdout.write("\n"); return 0
     except Exception as exc:
         print(f"{APP_NAME}: {type(exc).__name__}: {exc}", file=sys.stderr); return 1

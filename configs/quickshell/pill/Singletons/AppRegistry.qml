@@ -358,7 +358,7 @@ Singleton {
 
     Process {
         id: gamesScanProc
-        command: ["python3", root.gameDiscovery, "--home", Quickshell.env("HOME") || "", "--root", root.gamesDirectory]
+        command: ["python3", root.gameDiscovery, "--home", Quickshell.env("HOME") || "", "--root", root.gamesDirectory, "--registry", root.path]
         stdout: StdioCollector {
             onStreamFinished: {
                 try {
