@@ -41,7 +41,7 @@ Singleton {
     readonly property string dir: root.configHome + "/ricelin"
     readonly property string path: root.dir + "/applications.json"
     readonly property string gamesDirectory: Quickshell.env("RICELIN_GAMES_DIR") || ((Quickshell.env("HOME") || "") + "/Games")
-    readonly property string gamesScanner: root.configHome + "/hypr/scripts/ricelin-games-scan"
+    readonly property string gameDiscovery: root.configHome + "/hypr/scripts/ricelin-game-discovery"
 
     readonly property var categories: [
         { id: "game", label: "Games", glyph: "gamepad" },
@@ -242,113 +242,106 @@ Singleton {
      * creates/updates metadata; it never launches a candidate and never
      * deletes a user's record when a folder disappears.
      */
+    /*
+     * Reconcile the shared source-aware inventory with records already
+     * registered. A background scan may refresh metadata, but it never imports
+     * a new candidate or overwrites the user's launch settings.
+     */
     function syncDiscovered(index) {
         if (!root.ready || root.loadError || !index || !Array.isArray(index.games))
             return;
 
         var next = root.apps.slice();
-        var seen = ({});
         var changed = false;
-        var games = index.games;
-        var scanRoot = String(index.root || root.gamesDirectory);
+        var seenLocal = ({});
+        var scanRoot = root.withoutTrailingSlashes(root.gamesDirectory);
 
-        for (var g = 0; g < games.length; ++g) {
-            var game = games[g];
-            var source = String(game && game.sourcePath || "");
-            if (!source)
-                continue;
-            seen[source] = true;
+        function pathKey(value) {
+            return root.withoutTrailingSlashes(String(value || ""));
+        }
+        function matches(existing, candidate) {
+            var appid = String(candidate.steamAppId || "");
+            if (appid && String(existing.steamAppId || existing.steamAppid || "") === appid)
+                return true;
+            var desktopId = String(candidate.desktopEntryId || "");
+            if (desktopId && String(existing.desktopEntryId || "").toLowerCase() === desktopId.toLowerCase())
+                return true;
+            var executable = pathKey(candidate.executable);
+            if (executable && pathKey(existing.executable) === executable)
+                return true;
+            var source = pathKey(candidate.sourceId);
+            var install = pathKey(candidate.installDirectory);
+            if (source && pathKey(existing.sourcePath) === source)
+                return true;
+            if (candidate.source === "local-directory" && existing.executable && install
+                    && root.pathWithin(existing.executable, install))
+                return true;
+            return false;
+        }
+
+        for (var g = 0; g < index.games.length; ++g) {
+            var candidate = index.games[g] || {};
+            var local = candidate.source === "local-directory";
+            var source = String(candidate.sourceId || candidate.installDirectory || "");
+            if (local && source) {
+                seenLocal[pathKey(source)] = true;
+                if (candidate.installDirectory)
+                    seenLocal[pathKey(candidate.installDirectory)] = true;
+            }
 
             var at = -1;
             for (var i = 0; i < next.length; ++i) {
-                if (String(next[i].sourcePath || "") === source) {
+                if (matches(next[i], candidate)) {
                     at = i;
                     break;
                 }
             }
-
-            // Link an existing manually-created entry to its folder if the
-            // selected executable is already inside it. Do not create a duplicate.
-            if (at < 0) {
-                for (var j = 0; j < next.length; ++j) {
-                    var existing = next[j];
-                    if (!existing.sourcePath && existing.executable
-                            && pathWithin(existing.executable, String(game.gameFolder || source))) {
-                        at = j;
-                        break;
-                    }
-                }
-            }
-
-            if (at >= 0) {
-                var old = next[at];
-                var replacement = Object.assign({}, old, {
-                    category: "game",
-                    sourcePath: source,
-                    gameFolder: String(game.gameFolder || source),
-                    candidateExecutables: Array.isArray(game.candidateExecutables) ? game.candidateExecutables : [],
-                    discovered: true,
-                    folderMissing: false
-                });
-                if ((!old.executable || old.needsSetup) && game.executable) {
-                    replacement.executable = String(game.executable);
-                    replacement.workingDirectory = String(game.workingDirectory || game.gameFolder || source);
-                    replacement.needsSetup = false;
-                    if (/\.exe$/i.test(replacement.executable) && !replacement.prefix)
-                        replacement.prefix = root.dataHome + "/ricelin/prefixes/" + String(old.id);
-                }
-                replacement = root.normalizeRecord(replacement);
-                if (!root.sameJson(old, replacement)) {
-                    next[at] = replacement;
-                    changed = true;
-                }
+            // Deliberately no "add" path here: users import from the Scan UI.
+            if (at < 0)
                 continue;
-            }
 
-            var name = String(game.name || source.split("/").pop() || "Game");
-            var idBase = root.slugify(name);
-            var id = idBase;
-            var suffix = 2;
-            while (next.some(item => String(item.id || "") === id)) {
-                id = idBase + "-" + suffix;
-                suffix++;
+            var old = next[at];
+            var patch = {};
+            if (local) {
+                if (!old.sourcePath && source)
+                    patch.sourcePath = source;
+                if (!old.gameFolder && candidate.installDirectory)
+                    patch.gameFolder = String(candidate.installDirectory);
+                if ((!Array.isArray(old.candidateExecutables) || old.candidateExecutables.length === 0)
+                        && candidate.executable) {
+                    patch.candidateExecutables = [{
+                        path: String(candidate.executable),
+                        name: String(candidate.name || ""),
+                        kind: String(candidate.executable).toLowerCase().endsWith(".exe") ? "windows" : "native",
+                        score: 0
+                    }];
+                }
+                patch.discovered = true;
+                patch.folderMissing = false;
             }
-            var executable = String(game.executable || "");
-            var candidates = Array.isArray(game.candidateExecutables) ? game.candidateExecutables : [];
-            var hasWindowsCandidate = /\.exe$/i.test(executable)
-                || candidates.some(item => String(item && item.kind || "") === "windows");
-            var order = 0;
-            for (var k = 0; k < next.length; ++k)
-                order = Math.max(order, Number(next[k].bladeOrder) || 0);
+            if (!old.desktopEntryId && candidate.desktopEntryId)
+                patch.desktopEntryId = String(candidate.desktopEntryId);
+            if (!old.steamAppId && candidate.steamAppId)
+                patch.steamAppId = String(candidate.steamAppId);
+            if (!old.workingDirectory && candidate.workingDirectory)
+                patch.workingDirectory = String(candidate.workingDirectory);
+            if (!old.prefix && candidate.prefix)
+                patch.prefix = String(candidate.prefix);
 
-            var record = root.normalizeRecord({
-                id: id,
-                name: name,
-                category: "game",
-                favorite: false,
-                blade: "auto",
-                bladeOrder: order + 1,
-                runner: "auto",
-                executable: executable,
-                workingDirectory: String(game.workingDirectory || game.gameFolder || source),
-                prefix: hasWindowsCandidate ? (root.dataHome + "/ricelin/prefixes/" + id) : "",
-                sourcePath: source,
-                gameFolder: String(game.gameFolder || source),
-                candidateExecutables: candidates,
-                needsSetup: !!game.needsSetup || !executable,
-                discovered: true,
-                folderMissing: false,
-                createdAt: Date.now()
-            });
-            next.push(record);
-            changed = true;
+            var replacement = root.normalizeRecord(Object.assign({}, old, patch));
+            if (!root.sameJson(old, replacement)) {
+                next[at] = replacement;
+                changed = true;
+            }
         }
 
+        // Missing-folder state applies only to previously discovered local
+        // paths under the configured Games root, not Steam/Lutris/desktop data.
         for (var m = 0; m < next.length; ++m) {
             var saved = next[m];
             if (!saved.discovered || !saved.sourcePath || !root.pathWithin(saved.sourcePath, scanRoot))
                 continue;
-            var isMissing = !seen[String(saved.sourcePath)];
+            var isMissing = !seenLocal[pathKey(saved.sourcePath)];
             if (!!saved.folderMissing !== isMissing) {
                 next[m] = root.normalizeRecord(Object.assign({}, saved, { folderMissing: isMissing }));
                 changed = true;
@@ -369,7 +362,7 @@ Singleton {
 
     Process {
         id: gamesScanProc
-        command: ["python3", root.gamesScanner, "--root", root.gamesDirectory]
+        command: ["python3", root.gameDiscovery, "--home", Quickshell.env("HOME") || "", "--root", root.gamesDirectory]
         stdout: StdioCollector {
             onStreamFinished: {
                 try {
@@ -383,7 +376,7 @@ Singleton {
             onStreamFinished: {
                 var message = String(this.text || "").trim();
                 if (message.length > 0)
-                    console.warn("AppRegistry Games scanner:", message);
+                    console.warn("AppRegistry game discovery:", message);
             }
         }
         onExited: function(exitCode) {
