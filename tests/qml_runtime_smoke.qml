@@ -224,7 +224,7 @@ ShellRoot {
                         break
                     }
                 }
-                // The scanner is an asynchronous Process; let its first poll finish.
+                // The background scanner reconciles this pre-seeded fixture; it must not auto-import.
                 if (!discoveredGame)
                     return
                 if (String(discoveredGame.executable || "") !== expectedGameExecutable || discoveredGame.needsSetup) {

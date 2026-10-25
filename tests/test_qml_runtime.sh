@@ -26,7 +26,7 @@ config="$work/config"
 runtime="$work/runtime"
 qml_dir="$work/qml"
 game="$home/Games/RicelinRuntimeSmoke"
-prefix="$game/prefix"
+prefix="$home/.local/share/ricelin/prefixes/ricelin-runtime-smoke"
 prefix_executable="$game/game.exe"
 workdir="$game/work dir"
 desktop_bin="$home/bin"
@@ -35,7 +35,7 @@ applications="$home/.local/share/applications"
 argv_log="$work/argv.log"
 log="$work/quickshell.log"
 
-mkdir -p -- "$home" "$home/.config/hypr/scripts" "$config/hypr/scripts" "$runtime" "$qml_dir" "$workdir" "$desktop_bin" "$applications"
+mkdir -p -- "$home" "$home/.config/hypr/scripts" "$config/hypr/scripts" "$config/ricelin" "$runtime" "$qml_dir" "$workdir" "$desktop_bin" "$applications" "$prefix"
 chmod 700 "$runtime"
 : > "$prefix_executable"
 
@@ -56,6 +56,27 @@ Exec="$desktop_executable" --alpha "value with spaces" --beta
 Path=$workdir
 Terminal=false
 NoDisplay=false
+EOF
+cat > "$config/ricelin/applications.json" <<EOF
+[
+  {
+    "id": "ricelin-runtime-smoke",
+    "name": "RicelinRuntimeSmoke",
+    "category": "game",
+    "runner": "umu",
+    "executable": "$prefix_executable",
+    "workingDirectory": "$workdir",
+    "sourcePath": "$game",
+    "gameFolder": "$game",
+    "candidateExecutables": [],
+    "needsSetup": false,
+    "discovered": true,
+    "folderMissing": false,
+    "prefix": "$prefix",
+    "steamAppId": "",
+    "desktopEntryId": ""
+  }
+]
 EOF
 
 install -m 755 "$repo/configs/hypr/scripts/ricelin-prefix" "$config/hypr/scripts/ricelin-prefix"
