@@ -4,7 +4,6 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import "Singletons"
-import "lib/desktopentry.js" as DesktopImport
 
 /**
  * "Add → Scan": discover applications from ~/Games, Steam, Lutris and
@@ -27,6 +26,7 @@ Item {
     implicitHeight: col.implicitHeight
 
     property bool scanning: true
+    property string scanError: ""
     property var candidates: []
     property var checked: ({})
 
@@ -38,6 +38,7 @@ Item {
         root.scanning = true
         root.candidates = []
         root.checked = ({})
+        root.scanError = ""
         scanProc.running = true
     }
 
@@ -75,6 +76,9 @@ Item {
     }
 
    function candidateKey(c) {
+       if (c.id && String(c.id).length > 0)
+           return String(c.id)
+
        if (c.steamAppId && String(c.steamAppId).length > 0)
            return "steam:" + String(c.steamAppId)
 
@@ -91,160 +95,114 @@ Item {
 
     Process {
         id: scanProc
+        command: ["python3", AppRegistry.gameDiscovery,
+                  "--home", Quickshell.env("HOME") || "",
+                  "--root", AppRegistry.gamesDirectory,
+                  "--registry", AppRegistry.path]
 
-        command: [
-           "sh",
-           "-c",
-           "for d in \"$HOME/Games\"/*/; do [ -d \"$d\" ] || continue; "
-           + "n=$(basename \"$d\"); "
-           + "e=$(find \"$d\" -maxdepth 3 -iname '*.exe' ! -iname 'unins*' 2>/dev/null | head -1); "
-           + "[ -n \"$e\" ] || continue; "
-           + "p=''; "
-           + "for c in \"${d}prefix\" \"${d}proton-prefix\" \"${d}pfx\"; do "
-           + "[ -d \"$c\" ] && p=\"$c\" && break; "
-           + "done; "
-           + "printf 'GAMESFOLDER|%s|%s|%s\\n' \"$n\" \"$e\" \"$p\"; "
-           + "done; "
-
-           + "base=\"$HOME/.local/share/Steam/steamapps\"; "
-           + "for m in \"$base\"/appmanifest_*.acf; "
-           + "[ -f \"$m\" ] || continue; "
-           + "instdir=$(sed -n 's/^[[:space:]]*\"installdir\"[[:space:]]*\"\\(.*\\)\".*/\\1/p' \"$m\" | head -1); "
-           + "[ -n \"$instdir\" ] || continue; "
-           + "case \"$instdir\" in */*|.|..) continue ;; esac; "
-           + "g=\"$base/common/$instdir\"; [ -d \"$g\" ] || continue; "
-           + "appid=$(basename \"$m\" .acf | sed 's/^appmanifest_//'); "
-           + "printf 'STEAM|%s|%s|%s\\n' \"$instdir\" \"$g\" \"$appid\"; "
-           + "done; "
-
-           + "if [ -d \"$HOME/.config/lutris/games\" ]; then "
-           + "for y in \"$HOME/.config/lutris/games\"/*.yml; do "
-           + "[ -f \"$y\" ] || continue; "
-           + "n=$(grep -m1 '^name:' \"$y\" | sed 's/^name:[[:space:]]*//'); "
-           + "e=$(grep -m1 'exe:' \"$y\" | sed 's/.*exe:[[:space:]]*//'); "
-           + "[ -n \"$n\" ] && printf 'LUTRIS|%s|%s|\\n' \"$n\" \"$e\"; "
-           + "done; "
-           + "fi; true"
-       ]
-
-       stdout: StdioCollector {
+        stdout: StdioCollector {
             onStreamFinished: {
-                var found = []
-                var lines = this.text.split("\n")
+                try {
+                    var report = JSON.parse(this.text || "{}")
+                    if (!report.games || !Array.isArray(report.games))
+                        throw new Error("discovery output has no games array")
+                    if (report.registry && report.registry.exists && !report.registry.readable)
+                        throw new Error("applications.json could not be read safely")
 
-                for (var i = 0; i < lines.length; i++) {
-                    var line = lines[i]
-                    if (line.length === 0)
-                        continue
-
-                    var parts = line.split("|")
-                    if (parts.length < 3)
-                        continue
-
-                    var source = parts[0]
-
-                    if (source !== "GAMESFOLDER" &&
-                        source !== "STEAM" &&
-                        source !== "LUTRIS") {
-                        continue
-                    }
-
-                    var candidate = {
-                        source: source,
-                        name: parts[1] || "",
-                        executable: parts[2] || "",
-                        prefix: parts[3] || "",
-                        category: "game",
-                        runner: source === "STEAM" ? "steam" : "wine"
-                    }
-
-                    if (source === "STEAM") {
-                        candidate.installPath = parts[2] || ""
-                        candidate.steamAppId = parts[3] || ""
-                        candidate.executable = ""
-                        candidate.prefix = ""
-
-                        // Do not surface Steam's compatibility/runtime
-                        // infrastructure as user applications.
-                        if (root.isSteamInfrastructure(candidate.name))
+                    var found = []
+                    for (var i = 0; i < report.games.length; ++i) {
+                        var item = report.games[i] || {}
+                        if (item.alreadyRegistered)
                             continue
+                        var appid = String(item.steamAppId || "")
+                        var executable = appid ? "" : String(item.executable || "")
+                        var source = String(item.source || "")
+                        var uiSource = source === "steam" || source === "steam-desktop" ? "STEAM"
+                            : source === "local-directory" ? "GAMESFOLDER"
+                            : source === "lutris" ? "LUTRIS"
+                            : source === "wine-desktop" ? "WINE_DESKTOP" : "DESKTOP"
+                        var runner = appid ? "steam" : String(item.runner || "")
+                        if (runner === "lutris" || !runner)
+                            runner = executable.toLowerCase().endsWith(".exe") ? "wine" : "native"
+                        if (runner === "native" && executable.toLowerCase().endsWith(".exe"))
+                            runner = "wine"
+                        var candidate = {
+                            id: String(item.id || ""),
+                            source: uiSource,
+                            sourceKind: source,
+                            name: String(item.name || ""),
+                            category: "game",
+                            executable: executable,
+                            prefix: String(item.prefix || ""),
+                            steamAppId: appid,
+                            desktopEntryId: String(item.desktopEntryId || ""),
+                            desktopEntry: String(item.desktopEntry || ""),
+                            installPath: String(item.installDirectory || ""),
+                            sourcePath: source === "local-directory" ? String(item.sourceId || "") : "",
+                            gameFolder: source === "local-directory" ? String(item.installDirectory || "") : "",
+                            workingDirectory: String(item.workingDirectory || ""),
+                            runner: runner,
+                            args: Array.isArray(item.args) ? item.args : [],
+                            env: item.env || {},
+                            startupWMClass: String(item.startupWMClass || ""),
+                            needsSetup: !!item.needsSetup,
+                            candidateExecutables: executable ? [{
+                                path: executable,
+                                name: String(item.name || ""),
+                                kind: executable.toLowerCase().endsWith(".exe") ? "windows" : "native",
+                                score: 0
+                            }] : [],
+                            evidence: Array.isArray(item.evidence) ? item.evidence : []
+                        }
+                        var represented = AppRegistry.apps.some(function(app) {
+                            if (candidate.steamAppId &&
+                                String(app.steamAppId || app.steamAppid || "") === candidate.steamAppId)
+                                return true
+                            if (candidate.desktopEntryId &&
+                                String(app.desktopEntryId || "").toLowerCase() === candidate.desktopEntryId.toLowerCase())
+                                return true
+                            return !!candidate.executable &&
+                                String(app.executable || "").toLowerCase() === candidate.executable.toLowerCase()
+                        })
+                        if (!represented)
+                            found.push(candidate)
                     }
 
-                    found.push(candidate)
+                    var seen = ({})
+                    root.candidates = found.filter(function(candidate) {
+                        if (!candidate.name)
+                            return false
+                        var key = root.candidateKey(candidate)
+                        if (seen[key])
+                            return false
+                        seen[key] = true
+                        return true
+                    })
+                    root.checked = ({})
+                    root.scanning = false
+                    root.scanError = ""
+                } catch (e) {
+                    root.candidates = []
+                    root.checked = ({})
+                    root.scanning = false
+                    root.scanError = "Discovery failed: " + String(e)
+                    console.warn("ScanApplicationsSheet: shared game discovery failed:", String(e))
                 }
+            }
+        }
 
-                // Desktop entries.
-                for (var d = 0;
-                     d < DesktopEntries.applications.values.length;
-                     d++) {
-                    var e = DesktopEntries.applications.values[d]
+        stderr: StdioCollector {
+            onStreamFinished: {
+                var message = String(this.text || "").trim()
+                if (message.length > 0)
+                    console.warn("ScanApplicationsSheet discovery:", message)
+            }
+        }
 
-                    if (!e || !e.execString || e.noDisplay)
-                        continue
-
-                    var cats = (e.categories || []).join(",").toLowerCase()
-
-                    var cat = cats.indexOf("game") >= 0
-                        ? "game"
-                        : cats.indexOf("development") >= 0
-                            ? "development"
-                            : (cats.indexOf("science") >= 0 ||
-                               cats.indexOf("engineering") >= 0)
-                                ? "engineering"
-                                : "utility"
-
-                   found.push(DesktopImport.fromEntry(e, cat, Quickshell.env("WINEPREFIX") || ((Quickshell.env("HOME") || "") + "/.wine")))
-                }
-
-                var existingSteamIds =
-                    AppRegistry.apps
-                        .filter(a => a.runner === "steam")
-                        .map(a => String(a.steamAppId || ""));
-
-                var existingDesktopEntryIds =
-                    AppRegistry.apps
-                        .map(a => String(a.desktopEntryId || ""))
-                        .filter(id => id.length > 0);
-
-
-               // First remove things already represented by the registry.
-               var fresh = found.filter(c => {
-                   if (c.name.length === 0)
-                       return false
-
-                   if (c.desktopEntryId &&
-                       existingDesktopEntryIds.indexOf(String(c.desktopEntryId)) >= 0) {
-                       return false
-                   }
-
-                   if (c.steamAppId &&
-                       existingSteamIds.indexOf(String(c.steamAppId)) >= 0) {
-                       return false
-                   }
-
-                   if (c.source === "STEAM")
-                       return !!c.steamAppId
-
-                   return c.executable.length > 0 &&
-                          root.existingExecs.indexOf(c.executable) < 0
-               })
-
-                // Then deduplicate within this scan itself.
-                var seen = ({})
-
-                root.candidates = fresh.filter(c => {
-                    var key = root.candidateKey(c)
-
-                    if (seen[key] === true)
-                        return false
-
-                    seen[key] = true
-                    return true
-                })
-
-
-               root.checked = ({})
+        onExited: function(exitCode) {
+            if (exitCode !== 0 && root.scanning) {
                 root.scanning = false
+                root.scanError = "Discovery exited with status " + exitCode
             }
         }
     }
@@ -594,7 +552,7 @@ Item {
 
         Text {
             visible: root.scanning
-            text: "Scanning games, Steam, Lutris and installed desktop launchers…"
+            text: "Scanning Steam, local games, Wine launchers and Lutris…"
             color: Theme.faint
             font.family: Theme.font
             font.pixelSize: 11 * root.s
@@ -604,7 +562,7 @@ Item {
             visible: !root.scanning && root.candidates.length === 0
             width: parent.width
             wrapMode: Text.WordWrap
-            text: "No new applications found. Everything already in your library has been filtered out."
+            text: root.scanError || "No new game candidates found. Everything already in your library has been filtered out."
             color: Theme.faint
             font.family: Theme.font
             font.pixelSize: 11 * root.s
@@ -816,21 +774,26 @@ Item {
                 continue
             }
 
-            AppRegistry.add({
+            var added = AppRegistry.add({
                 name: c.name,
                 category: c.category,
                 runner: c.runner,
-                executable: c.executable,
+                executable: c.executable || "",
+                sourcePath: c.sourcePath || "",
+                gameFolder: c.gameFolder || c.installPath || "",
+                candidateExecutables: Array.isArray(c.candidateExecutables) ? c.candidateExecutables : [],
+                needsSetup: !!c.needsSetup,
                 desktopEntryId: c.desktopEntryId || "",
                 args: Array.isArray(c.args) ? c.args : [],
-                prefix: c.prefix,
+                prefix: c.prefix || "",
                 steamAppId: c.steamAppId || "",
                 protonBuild: c.protonBuild || "",
                 env: c.env || {},
                 workingDirectory: c.workingDirectory || ""
             })
 
-            n++
+            if (added)
+                n++
         }
 
         root.imported(n)
