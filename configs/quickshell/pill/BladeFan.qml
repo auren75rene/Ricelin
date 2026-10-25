@@ -356,7 +356,7 @@ Item {
                             if (blade.appState === "stopping")
                                 return "stopping";
                             if (blade.appState === "setup")
-                                return "choose launch executable";
+                                return "configure launch target";
                             if (blade.appState === "missing")
                                 return "game folder missing";
                             if (blade.appState === "failed")

@@ -130,7 +130,7 @@ QtObject {
             return "running";
         if (app.folderMissing)
             return "missing";
-        if (app.needsSetup || !app.executable)
+        if (app.needsSetup || !AppLauncher.hasLaunchTarget(app))
             return "setup";
         if (AppLauncher.isPending(app.id))
             return "preparing";
@@ -311,8 +311,14 @@ QtObject {
             root.configure(index);
             return;
         }
-        if (app.needsSetup || !app.executable) {
-            root.configure(index);
+        var targetStatus = AppLauncher.launchTargetStatus(app);
+        if (app.needsSetup || !targetStatus.valid) {
+            // Invalid Steam AppIDs are configured in the app editor, not by
+            // browsing for an unrelated local executable.
+            if (app.needsSetup || targetStatus.requiresExecutable)
+                root.configure(index);
+            else
+                AppLauncher.launch(app.id, true);
             return;
         }
 

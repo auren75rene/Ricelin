@@ -24,10 +24,10 @@ const names = (list) => list.map((a) => a.name).join(",");
 
 console.log("eligible");
 check("a game is in by default", () => assert.ok(B.eligible(rec({}))));
-check("a Wine app that is not a game is in", () => assert.ok(B.eligible(rec({ category: "utility", runner: "wine" }))));
-check("wine-staging, umu and steam count as Wine-family", () => {
-    for (const r of ["wine-staging", "umu", "steam"])
-        assert.ok(B.eligible(rec({ category: "utility", runner: r })), r);
+check("a utility does not appear by default even with Wine", () => assert.ok(!B.eligible(rec({ category: "utility", runner: "wine" }))));
+check("Wine-family runners do not override category", () => {
+    for (const r of ["wine", "wine-staging", "umu", "steam"])
+        assert.ok(!B.eligible(rec({ category: "utility", runner: r })), r);
 });
 check("a native utility is out", () => assert.ok(!B.eligible(rec({ category: "utility", runner: "native" }))));
 check("a native game is in", () => assert.ok(B.eligible(rec({ category: "game", runner: "native" }))));
@@ -99,6 +99,13 @@ check("similar but non-identical titles are not fuzzy-matched", () => {
     assert.ok(!B.matchesWindow(
         rec({ id: "doom", name: "Doom" }),
         { cls: "wine", title: "Doom Eternal" },
+        null
+    ));
+});
+check("Steam AppID window class matches without a local executable", () => {
+    assert.ok(B.matchesWindow(
+        rec({ id: "ddlc", name: "Doki Doki Literature Club", category: "game", runner: "steam", steamAppId: "698780", executable: "" }),
+        { cls: "steam_app_698780", title: "Doki Doki Literature Club" },
         null
     ));
 });
