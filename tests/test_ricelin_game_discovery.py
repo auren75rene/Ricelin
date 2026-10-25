@@ -104,7 +104,7 @@ class DiscoveryTests(unittest.TestCase):
 
     def test_explicit_registry_path_is_respected(self):
         registry = self.home / "custom-config/ricelin/applications.json"
-        registry.parent.mkdir(parents=True); registry.write_text("[]\\n")
+        registry.parent.mkdir(parents=True); registry.write_text("[]\n")
         report = mod.discover(self.home, registry_path=registry)
         self.assertEqual(report["registry"]["path"], str(registry.resolve()))
         self.assertTrue(report["registry"]["exists"])
