@@ -200,6 +200,23 @@ def desktop_exec_details(line: str) -> dict[str, Any]:
     args = [x for x in args if not re.fullmatch(r"%[fFuUdDnNickvm]", x)]
     return {"target": target, "prefix": prefix, "runner": runner, "env": env, "args": args}
 
+def has_payload_executable(folder: Path) -> bool:
+    """A Wine shortcut is not enough evidence if its stated install directory is gone/empty."""
+    if not folder.is_dir():
+        return False
+    try:
+        for current, dirs, files in os.walk(folder, followlinks=False):
+            cur = Path(current)
+            if len(cur.relative_to(folder).parts) >= 3:
+                dirs[:] = []
+            if any(name.casefold().endswith(".exe")
+                   and name.casefold() not in IGNORE_EXES
+                   and not likely_utility(str(cur / name)) for name in files):
+                return True
+    except (OSError, ValueError):
+        return False
+    return False
+
 def desktop_candidates(home: Path, prefixes: list[Path]) -> list[dict[str, Any]]:
     roots = [(home / ".local/share/applications", True),
       (home / ".local/share/flatpak/exports/share/applications", True), (home / "Desktop", False)]
@@ -229,6 +246,11 @@ def desktop_candidates(home: Path, prefixes: list[Path]) -> list[dict[str, Any]]
             game_hint = any("/games/" in x.casefold() or "\\games\\" in x.casefold() for x in (path_field, target or ""))
             prefix_hint = bool(prefix and any(x in str(prefix).casefold() for x in ("/games/", "/desktop/", "/ricelin/wine/")))
             wine_game = wine_menu and valid and (game_hint or prefix_hint)
+            # Wine shortcuts can outlive an uninstalled game. If a launcher
+            # explicitly names a host-side working directory, require it to
+            # still contain a plausible game executable before surfacing it.
+            if wine_game and path_field.startswith("/") and not has_payload_executable(Path(path_field)):
+                continue
             startup = data.get("StartupWMClass", "").strip()
             if startup.casefold().endswith(".url") or any(x in name.casefold() for x in ("releases and updates", "official site")): continue
             if not (is_game or appid or wine_game) or likely_utility(" ".join((name, target or "", str(prefix or ""), path_field))): continue

@@ -238,11 +238,6 @@ Singleton {
     }
 
     /*
-     * Reconcile the read-only folder index into the registry. Discovery only
-     * creates/updates metadata; it never launches a candidate and never
-     * deletes a user's record when a folder disappears.
-     */
-    /*
      * Reconcile the shared source-aware inventory with records already
      * registered. A background scan may refresh metadata, but it never imports
      * a new candidate or overwrites the user's launch settings.

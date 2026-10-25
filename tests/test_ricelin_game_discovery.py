@@ -65,6 +65,9 @@ class DiscoveryTests(unittest.TestCase):
 
     def test_quoted_wineprefix_desktop_entry(self):
         prefix = self.home / "Games/wineprefix"; self.prefix(prefix)
+        payload = prefix / "drive_c/Games/Example"
+        payload.mkdir(parents=True)
+        (payload / "Example.exe").touch()
         desktop = self.home / ".local/share/applications/wine/Programs/Example/Example.desktop"
         desktop.parent.mkdir(parents=True)
         desktop.write_text("[Desktop Entry]\nType=Application\nName=Example\n" +

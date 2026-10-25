@@ -93,7 +93,7 @@ Item {
 
    Component.onCompleted: root.rescan()
 
-        Process {
+    Process {
         id: scanProc
         command: ["python3", AppRegistry.gameDiscovery,
                   "--home", Quickshell.env("HOME") || "",
@@ -561,7 +561,7 @@ Item {
             visible: !root.scanning && root.candidates.length === 0
             width: parent.width
             wrapMode: Text.WordWrap
-            text: "No new applications found. Everything already in your library has been filtered out."
+            text: root.scanError || "No new game candidates found. Everything already in your library has been filtered out."
             color: Theme.faint
             font.family: Theme.font
             font.pixelSize: 11 * root.s

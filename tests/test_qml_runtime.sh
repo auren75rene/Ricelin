@@ -60,6 +60,7 @@ EOF
 
 install -m 755 "$repo/configs/hypr/scripts/ricelin-prefix" "$config/hypr/scripts/ricelin-prefix"
 install -m 755 "$repo/configs/hypr/scripts/ricelin-games-scan" "$config/hypr/scripts/ricelin-games-scan"
+install -m 644 "$repo/configs/hypr/scripts/ricelin-game-discovery" "$config/hypr/scripts/ricelin-game-discovery"
 install -m 755 "$repo/configs/hypr/scripts/ricelin-style" "$home/.config/hypr/scripts/ricelin-style"
 install -m 755 "$repo/configs/hypr/scripts/qs-toggle.sh" "$home/.config/hypr/scripts/qs-toggle.sh"
 install -m 644 "$here/qml_runtime_smoke.qml" "$qml_dir/qml_runtime_smoke.qml"
