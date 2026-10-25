@@ -42,6 +42,7 @@ Singleton {
     readonly property string path: root.dir + "/applications.json"
     readonly property string gamesDirectory: Quickshell.env("RICELIN_GAMES_DIR") || ((Quickshell.env("HOME") || "") + "/Games")
     readonly property string gameDiscovery: root.configHome + "/hypr/scripts/ricelin-game-discovery"
+    readonly property bool gameScanRunning: gamesScanProc.running
 
     readonly property var categories: [
         { id: "game", label: "Games", glyph: "gamepad" },

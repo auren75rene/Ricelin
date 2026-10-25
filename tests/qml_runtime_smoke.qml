@@ -215,6 +215,15 @@ ShellRoot {
             var expectedGameFolder = Quickshell.env("RICELIN_TEST_GAME_FOLDER") || ""
             var expectedGameExecutable = Quickshell.env("RICELIN_TEST_EXECUTABLE") || ""
             if (expectedGameFolder.length > 0 && !root.gameScanChecked) {
+                // Wait for the shared backend and assert it reconciles this seed
+                // record without auto-importing candidates.
+                if (AppRegistry.gameScanRunning)
+                    return;
+                if (AppRegistry.apps.length !== 1) {
+                    root.fail("background discovery must not auto-import candidates; registry entries="
+                        + AppRegistry.apps.length);
+                    return;
+                }
                 var discoveredGame = null
                 for (var g = 0; g < AppRegistry.apps.length; ++g) {
                     var gameRecord = AppRegistry.apps[g]
@@ -227,8 +236,11 @@ ShellRoot {
                 // The background scanner reconciles this pre-seeded fixture; it must not auto-import.
                 if (!discoveredGame)
                     return
+                if (!Array.isArray(discoveredGame.candidateExecutables)
+                        || discoveredGame.candidateExecutables.length === 0)
+                    return
                 if (String(discoveredGame.executable || "") !== expectedGameExecutable || discoveredGame.needsSetup) {
-                    root.fail("Games scanner did not register the expected executable: " + JSON.stringify(discoveredGame))
+                    root.fail("Games scanner did not reconcile the expected executable metadata: " + JSON.stringify(discoveredGame))
                     return
                 }
                 if (String(discoveredGame.prefix || "").indexOf("/ricelin/prefixes/") < 0) {
