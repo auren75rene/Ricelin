@@ -1,0 +1,368 @@
+#!/usr/bin/env python3
+"""Read-only, source-aware game inventory for Ricelin. Never executes targets or mutates the app registry."""
+from __future__ import annotations
+import argparse, json, os, re, shlex, sys, time
+from pathlib import Path
+from typing import Any, Iterable
+
+APP_NAME = "ricelin-game-discovery"
+SKIP_DIRS = {".git", ".cache", "cache", "caches", "prefix", "prefixes", ".wine", "wineprefix",
+ "wine-prefix", "drive_c", "dosdevices", "windows", "commonredist", "redist", "redistributable",
+ "redistributables", "prereq", "prereqs", "prerequisites", "__installer", "installer", "uninstallers",
+ "compatibilitytools.d", "shadercache", "temp", "tmp"}
+IGNORE_EXES = {"uninstall.exe", "uninstaller.exe", "unins000.exe", "unins001.exe", "unins002.exe",
+ "setup.exe", "install.exe", "dxsetup.exe", "directxsetup.exe", "vcredist_x64.exe", "vcredist_x86.exe",
+ "vc_redist.x64.exe", "ue4prereqsetup_x64.exe", "unitycrashhandler64.exe", "unitycrashhandler32.exe",
+ "crashreportclient.exe", "crashpad_handler.exe", "nginx.exe", "_mplink.exe", "a51.exe", "avr-gcc.exe",
+ "avrdude.exe", "pds.exe", "asem.exe", "avrasm2.exe", "uv4.exe", "c51.exe"}
+UTILITY_MARKERS = ("uninstall", "unins", "hi tools", "hitools", "huawei", "proteus", "keil", "winavr",
+ "yagarto", "sdcc", "avr insight", "mfile", "programmers notepad", "nginx", "mplink", "a51.exe",
+ "unitycrashhandler", "crashpad_handler", "steamworks common redistributables", "steam linux runtime",
+ "proton -", "releases and updates", "official site")
+STEAM_NON_GAMES = ("proton", "steam linux runtime", "steamworks common redistributables", "steam runtime",
+ "pressure-vessel", "soldier", "sniper runtime", "steam controller configs")
+PLATFORM_NAMES = {"steam", "lutris", "heroic", "bottles", "protonup-qt", "protonup qt", "itch",
+ "gamemode", "wine", "winetricks", "protontricks"}
+
+def normalized(value: str | Path | None) -> str:
+    return re.sub(r"[^a-z0-9]+", "", str(value or "").casefold())
+
+def norm_path(value: str | Path | None) -> str | None:
+    if value is None or not str(value).strip(): return None
+    try: return str(Path(value).expanduser().resolve(strict=False))
+    except (OSError, RuntimeError): return str(Path(value).expanduser())
+
+def is_within(path: Path, base: Path) -> bool:
+    try: path.resolve(strict=False).relative_to(base.resolve(strict=False)); return True
+    except (ValueError, OSError, RuntimeError): return False
+
+def read_text(path: Path) -> str:
+    try: return path.read_text(encoding="utf-8", errors="replace")
+    except OSError: return ""
+
+def parse_kv_vdf(text: str) -> dict[str, str]:
+    return dict(re.findall(r'"([^"\\]*(?:\\.[^"\\]*)*)"\s*"([^"\\]*(?:\\.[^"\\]*)*)"', text))
+
+def valid_wine_prefix(path: Path | None) -> bool:
+    return bool(path and path.is_dir() and (path / "system.reg").is_file() and (path / "drive_c").is_dir())
+
+def find_prefixes(home: Path, games_root: Path) -> list[Path]:
+    roots = [games_root, home / "Desktop", home / ".wine", home / ".local/share/ricelin/wine",
+      home / ".local/share/ricelin/prefixes", home / ".local/share/Steam/steamapps/compatdata",
+      home / ".steam/steam/steamapps/compatdata", home / ".config/lutris"]
+    found: set[Path] = set()
+    for root in roots:
+        if not root.is_dir(): continue
+        try:
+            if valid_wine_prefix(root): found.add(root.resolve(strict=False)); continue
+            for current, dirs, files in os.walk(root, followlinks=False):
+                cur = Path(current); depth = len(cur.relative_to(root).parts)
+                dirs[:] = [d for d in dirs if d.casefold() not in {"node_modules", "cache", "shadercache", "downloads"} and not d.startswith(".git")]
+                if "system.reg" in files and (cur / "drive_c").is_dir():
+                    found.add(cur.resolve(strict=False)); dirs[:] = []
+                elif depth >= 5: dirs[:] = []
+        except (OSError, ValueError): continue
+    return sorted(found, key=lambda p: str(p).casefold())
+
+def likely_utility(value: str | None) -> bool:
+    text = str(value or "").casefold().replace("_", " ").replace("-", " ")
+    return any(marker in text for marker in UTILITY_MARKERS)
+
+def prefix_for_game(game_root: Path, title: str, prefixes: list[Path]) -> Path | None:
+    nested = [p for p in prefixes if is_within(p, game_root)]
+    if nested: return max(nested, key=lambda p: len(str(p)))
+    key = normalized(title)
+    matches = [p for p in prefixes if len(normalized(p.name)) >= 5 and
+               (normalized(p.name) in key or key in normalized(p.name))]
+    return matches[0] if len(matches) == 1 else None
+
+def ignored_exe(path: Path, game_root: Path) -> bool:
+    if path.name.casefold() in IGNORE_EXES or likely_utility(str(path)): return True
+    try: parts = [p.casefold() for p in path.relative_to(game_root).parts[:-1]]
+    except ValueError: return True
+    if any(p in SKIP_DIRS or p in {"engine", "crashreportclient", "binaries-redist"} for p in parts): return True
+    return len(parts) > 7
+
+def local_game_candidates(home: Path, prefixes: list[Path], games_root: Path) -> list[dict[str, Any]]:
+    if not games_root.is_dir(): return []
+    found: list[dict[str, Any]] = []; nested_stems: set[str] = set()
+    for folder in sorted(games_root.iterdir(), key=lambda p: p.name.casefold()):
+        if not folder.is_dir() or folder.is_symlink() or folder.name.startswith(".") or likely_utility(folder.name): continue
+        exes: list[Path] = []
+        for current, dirs, files in os.walk(folder, followlinks=False):
+            cur = Path(current); dirs[:] = [d for d in dirs if d.casefold() not in SKIP_DIRS and not d.startswith(".")]
+            if valid_wine_prefix(cur) or any(is_within(cur, p) for p in prefixes if cur != p):
+                dirs[:] = []; continue
+            for filename in files:
+                path = cur / filename
+                if filename.casefold().endswith(".exe") and not ignored_exe(path, folder):
+                    exes.append(path); nested_stems.add(normalized(path.stem))
+        if not exes: continue
+        key = normalized(folder.name)
+        def score(path: Path) -> tuple[int, int, int, str]:
+            stem = normalized(path.stem)
+            exact = 100 if stem == key else (35 if key and key in stem else 0)
+            hint = 12 if "shipping" in path.name.casefold() or path.name.casefold() == "game.exe" else 0
+            root_hint = 10 if path.parent == folder else 0
+            penalty = 30 if "launcher" in path.stem.casefold() else 0
+            return (exact + hint + root_hint - penalty, -len(path.relative_to(folder).parts), -len(path.name), str(path).casefold())
+        selected = sorted(exes, key=score, reverse=True)[0]; prefix = prefix_for_game(folder, folder.name, prefixes)
+        found.append({"id": "local:" + str(folder.resolve(strict=False)).casefold(), "name": folder.name,
+          "source": "local-directory", "sourceId": str(folder.resolve(strict=False)), "steamAppId": None,
+          "executable": str(selected.resolve(strict=False)), "installDirectory": str(folder.resolve(strict=False)),
+          "workingDirectory": str(selected.parent.resolve(strict=False)), "prefix": norm_path(prefix) if prefix else None,
+          "runner": "wine", "launchMethod": "wine", "needsSetup": prefix is None,
+          "evidence": ["executable-under-games-directory", "primary-executable-heuristic"]})
+    for path in sorted(games_root.iterdir(), key=lambda p: p.name.casefold()):
+        if not path.is_file() or path.is_symlink() or path.suffix.casefold() != ".exe": continue
+        if ignored_exe(path, games_root) or normalized(path.stem) in nested_stems: continue
+        matches = [p for p in prefixes if len(normalized(p.name)) >= 5 and normalized(p.name) in normalized(path.stem)]
+        prefix = matches[0] if len(matches) == 1 else None
+        found.append({"id": "local-file:" + str(path.resolve(strict=False)).casefold(), "name": path.stem,
+          "source": "local-directory", "sourceId": str(path.resolve(strict=False)), "steamAppId": None,
+          "executable": str(path.resolve(strict=False)), "installDirectory": str(games_root.resolve(strict=False)),
+          "workingDirectory": str(games_root.resolve(strict=False)), "prefix": norm_path(prefix) if prefix else None,
+          "runner": "wine", "launchMethod": "wine", "needsSetup": prefix is None, "evidence": ["loose-root-executable"]})
+    return found
+
+def find_steam_roots(home: Path) -> list[Path]:
+    result: list[Path] = []
+    for p in (home / ".local/share/Steam", home / ".steam/steam", home / ".steam/root",
+              home / ".var/app/com.valvesoftware.Steam/.local/share/Steam"):
+        if p.is_dir():
+            q = p.resolve(strict=False)
+            if q not in result: result.append(q)
+    return result
+
+def steam_libraries(root: Path) -> list[Path]:
+    result = [root]; text = read_text(root / "steamapps/libraryfolders.vdf")
+    for raw in re.findall(r'"path"\s*"((?:[^"\\]|\\.)*)"', text):
+        p = Path(raw.replace("\\\\", "\\").replace("\\\"", '"')).expanduser()
+        if p.is_dir(): result.append(p.resolve(strict=False))
+    for raw in re.findall(r'^\s*"\d+"\s*"([^"\n]+)"', text, re.M):
+        p = Path(raw.replace("\\\\", "\\")).expanduser()
+        if p.is_dir(): result.append(p.resolve(strict=False))
+    return list(dict.fromkeys(result))
+
+def steam_candidates(home: Path) -> list[dict[str, Any]]:
+    found: dict[str, dict[str, Any]] = {}
+    for root in find_steam_roots(home):
+        for lib in steam_libraries(root):
+            apps = lib / "steamapps"
+            if not apps.is_dir(): continue
+            for manifest in sorted(apps.glob("appmanifest_*.acf")):
+                kv = parse_kv_vdf(read_text(manifest)); match = re.search(r"appmanifest_(\d+)\.acf$", manifest.name)
+                appid = kv.get("appid") or (match.group(1) if match else "")
+                name, install_name = kv.get("name", "").strip(), kv.get("installdir", "").strip()
+                if not appid or not name or kv.get("StateFlags", "4") != "4" or not install_name: continue
+                low = name.casefold()
+                if any(x in low for x in STEAM_NON_GAMES) or low in PLATFORM_NAMES: continue
+                install = apps / "common" / install_name
+                if not install.is_dir(): continue
+                pfx = apps / "compatdata" / str(appid) / "pfx"
+                found[str(appid)] = {"id": "steam:" + str(appid), "name": name, "source": "steam",
+                  "sourceId": str(appid), "steamAppId": str(appid), "manifest": str(manifest),
+                  "installDirectory": str(install.resolve(strict=False)), "executable": None,
+                  "workingDirectory": str(install.resolve(strict=False)), "prefix": norm_path(pfx) if valid_wine_prefix(pfx) else None,
+                  "runner": "steam", "launchMethod": "steam-uri", "needsSetup": False,
+                  "evidence": ["installed-steam-appmanifest"]}
+    return list(found.values())
+
+def parse_desktop(path: Path) -> dict[str, str] | None:
+    section = None; result: dict[str, str] = {}
+    for raw in read_text(path).splitlines():
+        line = raw.strip()
+        if line.startswith("[") and line.endswith("]"): section = line
+        elif section == "[Desktop Entry]" and line and not line.startswith("#") and "=" in line:
+            k, v = line.split("=", 1); result[k] = v
+    return result or None
+
+def desktop_exec_details(line: str) -> dict[str, Any]:
+    match = re.search(r'(?:^|\s)[\"\']?WINEPREFIX=(?:\"([^\"]+)\"|\'([^\']+)\'|([^\s\"\']+))', line, re.I)
+    prefix = next((g for g in match.groups() if g is not None), None) if match else None
+    try: parts = shlex.split(line.replace("\\\\", "\\"), posix=True)
+    except ValueError: parts = line.split()
+    target = next((p for p in parts if p.casefold().endswith((".exe", ".lnk", ".bat", ".com"))), None)
+    runner = "native"
+    for token in parts:
+        low = token.casefold()
+        if low in {"wine", "wine64"}: runner = "wine"
+        elif low == "wine-staging": runner = "wine-staging"
+        elif low == "umu-run": runner = "umu"
+        elif low == "steam": runner = "steam"
+    env = {}
+    for token in parts:
+        if "=" in token:
+            key, value = token.split("=", 1)
+            if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key): env[key] = value
+    if prefix: env["WINEPREFIX"] = prefix
+    args = parts[parts.index(target)+1:] if target in parts else []
+    args = [x for x in args if not re.fullmatch(r"%[fFuUdDnNickvm]", x)]
+    return {"target": target, "prefix": prefix, "runner": runner, "env": env, "args": args}
+
+def desktop_candidates(home: Path, prefixes: list[Path]) -> list[dict[str, Any]]:
+    roots = [(home / ".local/share/applications", True),
+      (home / ".local/share/flatpak/exports/share/applications", True), (home / "Desktop", False)]
+    found = []; seen: set[str] = set()
+    for root, recursive in roots:
+        if not root.is_dir(): continue
+        try: files = sorted(root.rglob("*.desktop") if recursive else root.glob("*.desktop"))
+        except OSError: continue
+        for path in files:
+            resolved = norm_path(path)
+            if not resolved or resolved in seen: continue
+            seen.add(resolved); data = parse_desktop(path)
+            if not data or data.get("Type", "Application") != "Application": continue
+            name = data.get("Name", path.stem).strip()
+            if not name or data.get("Hidden", "false").casefold() == "true" or data.get("NoDisplay", "false").casefold() == "true": continue
+            if name.casefold() in PLATFORM_NAMES or likely_utility(name): continue
+            exec_line = data.get("Exec", "").strip()
+            if not exec_line or "wine-extension-" in path.name.casefold(): continue
+            categories = {x.casefold() for x in data.get("Categories", "").split(";") if x}
+            details = desktop_exec_details(exec_line); target = details["target"]
+            appmatch = re.search(r"steam://rungameid/(\d+)|(?:^|\s)-applaunch\s+(\d+)", exec_line, re.I)
+            appid = next((x for x in appmatch.groups() if x), None) if appmatch else None
+            ptxt = details["prefix"]; prefix = Path(ptxt).expanduser().resolve(strict=False) if ptxt else None
+            valid = valid_wine_prefix(prefix); is_game = "game" in categories
+            wine_menu = is_within(path, home / ".local/share/applications/wine/Programs") or is_within(path, home / "Desktop")
+            path_field = data.get("Path", "").strip()
+            game_hint = any("/games/" in x.casefold() or "\\games\\" in x.casefold() for x in (path_field, target or ""))
+            prefix_hint = bool(prefix and any(x in str(prefix).casefold() for x in ("/games/", "/desktop/", "/ricelin/wine/")))
+            wine_game = wine_menu and valid and (game_hint or prefix_hint)
+            startup = data.get("StartupWMClass", "").strip()
+            if startup.casefold().endswith(".url") or any(x in name.casefold() for x in ("releases and updates", "official site")): continue
+            if not (is_game or appid or wine_game) or likely_utility(" ".join((name, target or "", str(prefix or ""), path_field))): continue
+            source = "steam-desktop" if appid else ("wine-desktop" if wine_game else "desktop-entry")
+            found.append({"id": "steam:" + appid if appid else "desktop:" + resolved.casefold(),
+              "name": name, "source": source, "sourceId": resolved, "steamAppId": appid, "desktopEntry": resolved,
+              "desktopEntryId": path.name, "exec": exec_line, "executable": target, "workingDirectory": path_field or None,
+              "installDirectory": None, "startupWMClass": startup or None, "prefix": norm_path(prefix) if prefix and valid else None,
+              "runner": "steam" if appid else ("wine" if wine_game else details["runner"]),
+              "args": details["args"], "env": details["env"], "launchMethod": "steam-uri" if appid else ("wine-desktop-entry" if wine_game else "desktop-entry"),
+              "needsSetup": False, "evidence": ["steam-appid-desktop-entry"] if appid else (["wine-shortcut-game-path"] if wine_game else ["desktop-categories-game"])})
+    return found
+
+def lutris_candidates(home: Path) -> list[dict[str, Any]]:
+    found = []
+    for root in (home / ".config/lutris/games", home / ".local/share/lutris/games"):
+        if not root.is_dir(): continue
+        for path in sorted(root.glob("*.yml")) + sorted(root.glob("*.yaml")):
+            text = read_text(path)
+            def scalar(key: str) -> str | None:
+                m = re.search(rf'^\s*{re.escape(key)}:\s*(?:["\']([^"\']*)["\']|([^\s#][^\n]*?))\s*(?:#.*)?$', text, re.M)
+                return ((m.group(1) or m.group(2)).strip() if m else None)
+            name = scalar("name") or path.stem; exe = scalar("exe") or scalar("executable"); pfx = scalar("prefix")
+            if not exe or likely_utility(name): continue
+            ep = Path(exe).expanduser()
+            if not ep.is_absolute(): ep = (path.parent / ep).resolve(strict=False)
+            prefix = Path(pfx).expanduser().resolve(strict=False) if pfx else None
+            if not valid_wine_prefix(prefix): prefix = None
+            found.append({"id": "lutris:" + path.stem.casefold(), "name": name, "source": "lutris",
+              "sourceId": str(path.resolve(strict=False)), "steamAppId": None, "config": str(path),
+              "executable": str(ep), "installDirectory": str(ep.parent), "workingDirectory": str(ep.parent),
+              "prefix": norm_path(prefix) if prefix else None, "runner": "wine" if ep.suffix.casefold() == ".exe" else "native",
+              "launchMethod": "lutris", "needsSetup": not ep.exists(), "evidence": ["lutris-game-config"]})
+    return found
+
+def registry_match(game: dict[str, Any], entries: list[dict[str, Any]]) -> dict[str, Any] | None:
+    appid = str(game.get("steamAppId") or ""); exe = norm_path(game.get("executable"))
+    desktop = str(game.get("desktopEntryId") or ""); name = str(game.get("name") or "").casefold()
+    source = norm_path(game.get("sourceId"))
+    for item in entries:
+        item_appid = str(item.get("steamAppId") or item.get("steamAppid") or "")
+        if appid and (appid == item_appid or str(item.get("id") or "").casefold() == "steam:" + appid): return item
+        if desktop and str(item.get("desktopEntryId") or "").casefold() == desktop.casefold(): return item
+        if exe and any(norm_path(str(item.get(k))) == exe for k in ("executable", "path", "target", "command") if item.get(k)): return item
+        if source and norm_path(item.get("sourcePath")) == source: return item
+        if name and str(item.get("name") or item.get("title") or "").casefold() == name and game.get("source") in {"local-directory", "wine-desktop"}: return item
+    return None
+
+def deduplicate(candidates: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+    out = []; by_appid = {}; by_id = {}
+    for c in candidates:
+        appid = str(c.get("steamAppId") or ""); ident = str(c.get("id") or "")
+        existing = by_appid.get(appid) if appid else by_id.get(ident)
+        if existing:
+            if c.get("source") == "steam-desktop":
+                for k in ("desktopEntry", "desktopEntryId", "exec", "startupWMClass", "args", "env"):
+                    if c.get(k): existing[k] = c[k]
+            continue
+        if c.get("source") in {"local-directory", "wine-desktop"}:
+            same = next((x for x in out if str(x.get("name", "")).casefold() == str(c.get("name", "")).casefold()
+                and {x.get("source"), c.get("source")} == {"local-directory", "wine-desktop"}), None)
+            if same:
+                local = c if c.get("source") == "local-directory" else same
+                desktop = c if c.get("source") == "wine-desktop" else same
+                for k in ("desktopEntry", "desktopEntryId", "exec", "startupWMClass", "args", "env"):
+                    if desktop.get(k): local[k] = desktop[k]
+                if not local.get("prefix") and desktop.get("prefix"): local["prefix"] = desktop["prefix"]
+                if local is same: continue
+                out[out.index(same)] = local; by_id[str(local.get("id") or "")] = local; continue
+        out.append(c); by_id[ident] = c
+        if appid: by_appid[appid] = c
+    return sorted(out, key=lambda x: str(x.get("name", "")).casefold())
+
+def load_registry(path: Path) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    status = {"path": norm_path(path), "exists": path.exists(), "readable": False, "format": None, "entryCount": 0, "error": None}
+    if not path.exists(): status["format"] = "missing"; return [], status
+    try: raw = path.read_text(encoding="utf-8"); status["readable"] = True; parsed = json.loads(raw)
+    except (OSError, json.JSONDecodeError) as exc: status["error"] = f"{type(exc).__name__}: {exc}"; return [], status
+    if isinstance(parsed, list): entries = [x for x in parsed if isinstance(x, dict)]; status["format"] = "json-array"
+    elif isinstance(parsed, dict):
+        wrapped = next((parsed[k] for k in ("applications", "apps", "entries", "items") if isinstance(parsed.get(k), list)), None)
+        entries = [x for x in wrapped if isinstance(x, dict)] if wrapped is not None else []
+        status["format"] = "wrapped-json-array" if wrapped is not None else "unsupported-json"
+    else: entries, status["format"] = [], "unsupported-json"
+    status["entryCount"] = len(entries)
+    if status["format"] == "unsupported-json": status["error"] = "applications.json must contain an array of objects"
+    return entries, status
+
+def discover(home: Path, games_root: Path | None = None) -> dict[str, Any]:
+    home = home.expanduser().resolve(strict=False); games_root = (games_root or home / "Games").expanduser().resolve(strict=False)
+    entries, status = load_registry(home / ".config/ricelin/applications.json")
+    prefixes = find_prefixes(home, games_root)
+    games = deduplicate(steam_candidates(home) + local_game_candidates(home, prefixes, games_root) + desktop_candidates(home, prefixes) + lutris_candidates(home))
+    for game in games:
+        match = registry_match(game, entries)
+        game["alreadyRegistered"] = match is not None
+        game["registeredEntryId"] = (match.get("id") or match.get("appId") or match.get("name")) if match else None
+        game["registryMatch"] = {"name": match.get("name") or match.get("title"), "runner": match.get("runner")} if match else None
+    return {"schemaVersion": 1, "tool": APP_NAME, "home": str(home), "registry": status,
+      "summary": {"candidateCount": len(games), "alreadyRegisteredCount": sum(bool(g["alreadyRegistered"]) for g in games),
+      "needsSetupCount": sum(bool(g.get("needsSetup")) for g in games), "steamCount": sum(g.get("source") == "steam" for g in games),
+      "localDirectoryCount": sum(g.get("source") == "local-directory" for g in games),
+      "desktopEntryCount": sum(g.get("source") in {"desktop-entry", "steam-desktop", "wine-desktop"} for g in games),
+      "lutrisCount": sum(g.get("source") == "lutris" for g in games), "winePrefixCount": len(prefixes)},
+      "winePrefixes": [str(p) for p in prefixes], "games": games, "readOnly": True,
+      "notes": ["Discovery does not import candidates or modify applications.json.",
+       "Only user-scoped desktop-entry directories are inspected; /usr/share/applications is excluded.",
+       "Local executable selection is heuristic; review candidates before import."]}
+
+def legacy_index(root: Path) -> dict[str, Any]:
+    root = root.expanduser().resolve(strict=False); report = discover(root.parent, root); games = []
+    for game in report["games"]:
+        if game.get("source") != "local-directory": continue
+        exe = str(game.get("executable") or ""); kind = "windows" if exe.casefold().endswith(".exe") else "native"
+        source = str(game.get("sourceId") or game.get("installDirectory") or "")
+        games.append({"sourcePath": source, "gameFolder": str(game.get("installDirectory") or root),
+          "name": str(game.get("name") or Path(source).name), "executable": exe,
+          "workingDirectory": str(game.get("workingDirectory") or game.get("installDirectory") or root),
+          "candidateExecutables": ([{"path": exe, "name": Path(exe).stem, "kind": kind, "score": 0}] if exe else []),
+          "needsSetup": bool(game.get("needsSetup"))})
+    return {"root": str(root), "games": games, "scannedAt": int(time.time()), "source": APP_NAME, "readOnly": True}
+
+def scan(root: Path) -> dict[str, Any]:
+    return legacy_index(root)
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--home", type=Path, default=Path.home()); parser.add_argument("--root", type=Path)
+    parser.add_argument("--format", choices=("inventory", "legacy-index"), default="inventory")
+    parser.add_argument("--pretty", action="store_true"); args = parser.parse_args(argv)
+    try:
+        result = legacy_index(args.root or (args.home / "Games")) if args.format == "legacy-index" else discover(args.home, args.root)
+        json.dump(result, sys.stdout, indent=2 if args.pretty else None, ensure_ascii=False); sys.stdout.write("\n"); return 0
+    except Exception as exc:
+        print(f"{APP_NAME}: {type(exc).__name__}: {exc}", file=sys.stderr); return 1
+
+if __name__ == "__main__": raise SystemExit(main())
