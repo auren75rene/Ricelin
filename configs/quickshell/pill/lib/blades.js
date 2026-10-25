@@ -8,12 +8,11 @@
  * fan, so the default rule is exactly that; the per-app `blade` field is the
  * user's override:
  *
- *   "auto"  games and Wine-family apps appear (the default)
+ *   "auto"  games appear (the default)
  *   "pin"   always appears, whatever it is
  *   "hide"  never appears
  */
 
-var AUTO_RUNNERS = ["wine", "wine-staging", "umu", "steam"];
 
 function lower(v) {
     return String(v === undefined || v === null ? "" : v).toLowerCase();
@@ -57,6 +56,7 @@ function matchesWindow(app, window, entry) {
     if (clsKey) {
         var candidates = [
             app.id,
+            app.steamAppId ? ("steam_app_" + String(app.steamAppId)) : "",
             app.name,
             app.desktopEntryId,
             entry && entry.id,
@@ -134,7 +134,7 @@ function eligible(app) {
         return false;
     if (m === "pin")
         return true;
-    return lower(app.category) === "game" || AUTO_RUNNERS.indexOf(lower(app.runner)) >= 0;
+    return lower(app.category) === "game";
 }
 
 /**

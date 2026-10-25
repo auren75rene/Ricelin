@@ -3,6 +3,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import "../lib/desktopentry.js" as DesktopImport
+import "../lib/launchcontract.js" as LaunchContract
 
 /**
  * Execution layer: turns an AppRegistry record into a real process and keeps
@@ -148,6 +149,28 @@ Singleton {
         return root.effectiveRecord(app).runner;
     }
 
+    /**
+     * Runner-aware target validation shared by the fan and process launcher.
+     * While Auto detection is incomplete, defer runner-specific checks rather
+     * than sending an AppID-only Steam game to the executable picker.
+     */
+    function launchTargetStatus(app) {
+        if (!app)
+            return LaunchContract.targetStatus(null, "", RuntimeManager.ready);
+        var normalized = AppRegistry.normalizeRecord(app);
+        if (normalized.runner === "auto" && !RuntimeManager.ready)
+            return LaunchContract.targetStatus(normalized, "auto", false);
+        return LaunchContract.targetStatus(
+            normalized,
+            root.effectiveRunnerFor(normalized),
+            RuntimeManager.ready
+        );
+    }
+
+    function hasLaunchTarget(app) {
+        return root.launchTargetStatus(app).valid;
+    }
+
     /** Builds { command, environment, workingDirectory } for the effective runner. */
     function buildInvocation(app) {
         var normalized = AppRegistry.normalizeRecord(app);
@@ -239,10 +262,13 @@ Singleton {
         if (!app || root.isRunning(appId) || root.isPending(appId))
             return false;
         root.clearFailure(appId);
-        if (app.needsSetup || app.folderMissing || !String(app.executable || "")) {
+        var targetStatus = root.launchTargetStatus(app);
+        if (app.needsSetup || app.folderMissing || !targetStatus.valid) {
             var setupMessage = app.folderMissing
                 ? "The game's folder is missing."
-                : "Choose the game's launch executable before launching it.";
+                : (app.needsSetup
+                    ? "This game still needs configuration."
+                    : String(targetStatus.reason || "Choose the game's launch target before launching it."));
             root.setFailure(appId, setupMessage);
             Quickshell.execDetached(["notify-send", "-u", "normal", "-a", "Ricelin", "Game needs setup: " + app.name, setupMessage]);
             return false;
