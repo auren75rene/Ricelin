@@ -27,6 +27,7 @@ jobs:
         run: |
           node tests/test_blades.js
           node tests/test_launch_contract.js
+          node tests/test_appstate.js
           node tests/test_dock.js
           node tests/test_styles_ui.js
           node tests/test_desktopentry.js
