@@ -46,7 +46,10 @@ Singleton {
     function desktopFor(app) {
         if (!app || AppLauncher.effectiveRunnerFor(app) !== "native")
             return null;
-        return DesktopImport.findEntry(DesktopEntries.applications.values || [], app);
+        // findEntry only accepts records whose declared runner is "native".
+        // Auto can resolve to native, so normalize the copy before looking up.
+        var nativeApp = Object.assign({}, app, { runner: "native" });
+        return DesktopImport.findEntry(DesktopEntries.applications.values || [], nativeApp);
     }
 
     function windowsFor(app) {
@@ -107,6 +110,7 @@ Singleton {
         var target = Blades.nextWindow(matches, activeAddress);
         if (target)
             Dock.focusWindow(target, String(preferredMonitor || target.monitor || ""));
+        root.clearLaunchRequest(appId);
         BladeSession.failedIds = root.clearObjectKey(BladeSession.failedIds, appId);
         return true;
     }

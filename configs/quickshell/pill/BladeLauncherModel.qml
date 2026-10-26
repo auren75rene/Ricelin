@@ -261,7 +261,7 @@ QtObject {
         if (AppSession.activateExisting(app.id, root.screenName))
             return;
 
-        if (app.id in BladeSession.queuedIds || app.id in BladeSession.launchTargets || AppLauncher.isRunning(app.id))
+        if (AppSession.isBusy(app.id))
             return;
 
         BladeSession.failedIds = root.clearObjectKey(BladeSession.failedIds, app.id);
