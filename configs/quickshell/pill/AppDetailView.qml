@@ -18,6 +18,7 @@ Item {
     required property var app
     property real s: 1
     property bool running: false
+    property bool busy: false
     property int pid: 0
     property real startedAt: 0
     property string launchError: ""
@@ -210,9 +211,9 @@ Item {
             spacing: 8 * root.s
             ActionButton {
                 width: (parent.width - 8 * root.s) / 2
-                primary: !root.running
-                label: root.running ? "Stop" : "Launch"
-                onClicked: root.running ? root.stop() : root.launch()
+                primary: !root.running && !root.busy
+                label: root.running ? "Stop" : root.busy ? "Cancel launch" : "Launch"
+                onClicked: (root.running || root.busy) ? root.stop() : root.launch()
             }
             ActionButton {
                 width: (parent.width - 8 * root.s) / 2

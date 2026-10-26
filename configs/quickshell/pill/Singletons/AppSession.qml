@@ -37,7 +37,8 @@ Singleton {
                 title: t.title || (ipc && ipc.title ? ipc.title : ""),
                 workspace: workspace ? String(workspace.name || "") : "",
                 workspaceId: workspace ? Number(workspace.id || 0) : 0,
-                monitor: workspace && workspace.monitor ? String(workspace.monitor.name || "") : ""
+                monitor: workspace && workspace.monitor ? String(workspace.monitor.name || "") : "",
+                pid: Number((ipc && ipc.pid) || t.pid || 0)
             });
         }
         return out;
@@ -190,8 +191,23 @@ Singleton {
     }
 
     function forceStop(appId) {
-        root.clearLaunchRequest(String(appId || ""));
-        AppLauncher.forceStop(appId);
+        var id = String(appId || "");
+        var app = AppRegistry.byId(id);
+        root.clearLaunchRequest(id);
+        var matches = app ? root.windowsFor(app) : [];
+        for (var i = 0; i < matches.length; ++i) {
+            var pid = Number(matches[i].pid || 0);
+            var address = Dock.hex(matches[i].address);
+            if (pid > 1)
+                Quickshell.execDetached(["kill", "-KILL", String(pid)]);
+            else if (address.length > 0)
+                Hyprland.dispatch('hl.dsp.window.close({window="address:' + address + '"})');
+        }
+        if (AppLauncher.isRunning(id) || !app)
+            AppLauncher.forceStop(id);
+        root.releaseTarget(id);
+        BladeSession.queuedIds = root.clearObjectKey(BladeSession.queuedIds, id);
+        BladeSession.failedIds = root.clearObjectKey(BladeSession.failedIds, id);
     }
 
     function stateFor(appId) {

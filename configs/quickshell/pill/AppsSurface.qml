@@ -225,6 +225,7 @@ PillSurface {
            app: root.selectedApp || AppRegistry.template()
            s: root.s
            running: AppSession.isActive(root.selectedId)
+           busy: AppSession.isBusy(root.selectedId)
            pid: AppLauncher.pidFor(root.selectedId)
            startedAt: AppLauncher.startedAt(root.selectedId)
            launchError: AppLauncher.failureFor(root.selectedId)
