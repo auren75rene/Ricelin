@@ -198,7 +198,7 @@ PillSurface {
                revealIndex: index
                 last: index === root.appsForView(root.category).length - 1
                 selected: index === appsList.currentIndex
-                running: AppLauncher.isRunning(modelData.id)
+                running: AppSession.isActive(modelData.id)
                 onActivated: {
                    appsList.currentIndex = index
                    root.openDetail(modelData.id)
@@ -224,22 +224,23 @@ PillSurface {
 
            app: root.selectedApp || AppRegistry.template()
            s: root.s
-           running: AppLauncher.isRunning(root.selectedId)
+           running: AppSession.isActive(root.selectedId)
+           busy: AppSession.isBusy(root.selectedId)
            pid: AppLauncher.pidFor(root.selectedId)
            startedAt: AppLauncher.startedAt(root.selectedId)
            launchError: AppLauncher.failureFor(root.selectedId)
 
            onBack: root.viewState = "list"
            onEditRequested: root.viewState = "editor"
-           onLaunch: AppLauncher.launch(root.selectedId)
-           onStop: AppLauncher.stop(root.selectedId)
-           onForceStop: AppLauncher.forceStop(root.selectedId)
+           onLaunch: AppSession.launch(root.selectedId)
+           onStop: AppSession.stop(root.selectedId)
+           onForceStop: AppSession.forceStop(root.selectedId)
 
            onRestart: {
                root.restartTargetId = root.selectedId;
                if (!root.restartTargetId)
                    return;
-               AppLauncher.stop(root.restartTargetId);
+               AppSession.stop(root.restartTargetId);
                restartTimer.restart();
            }
 
@@ -256,12 +257,12 @@ PillSurface {
                    var id = root.restartTargetId;
                    if (!id)
                        return;
-                   if (AppLauncher.isRunning(id)) {
+                   if (AppSession.isActive(id) || AppLauncher.isPending(id)) {
                        restartTimer.restart();
                        return;
                    }
                    root.restartTargetId = "";
-                   AppLauncher.launch(id);
+                   AppSession.launch(id);
                }
            }
        }

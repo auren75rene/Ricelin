@@ -343,9 +343,15 @@ ShellRoot {
                 return
             }
             root.testAppId = stored.id
-            AppLauncher.launch(stored.id, false)
-            if (!AppLauncher.isRunning(stored.id)) {
-                root.fail("AppLauncher did not start the imported desktop entry")
+            if (AppSession.windowsFor(null).length !== 0
+                    || AppSession.stateFor("missing-app-for-smoke") !== "idle") {
+                root.fail("shared AppSession returned invalid empty/missing-app state")
+                return
+            }
+            AppSession.launch(stored.id, false)
+            if (!AppLauncher.isRunning(stored.id) || !AppSession.isActive(stored.id)
+                    || AppSession.stateFor(stored.id) !== "launching") {
+                root.fail("shared AppSession did not dispatch and expose the imported app launch")
                 return
             }
             root.launchDispatched = true

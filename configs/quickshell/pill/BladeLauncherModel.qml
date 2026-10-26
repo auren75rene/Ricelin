@@ -19,28 +19,7 @@ QtObject {
     readonly property real launchTimeoutMs: 90000
     readonly property real stopTimeoutMs: 15000
 
-    /** Live Hyprland clients normalized to plain values for deterministic matching. */
-    readonly property var windows: {
-        var tl = Hyprland.toplevels.values || [];
-        var out = [];
-        for (var i = 0; i < tl.length; ++i) {
-            var t = tl[i];
-            if (!t)
-                continue;
-            var ipc = t.lastIpcObject;
-            var cls = ipc && ipc.class ? ipc.class
-                : (t.wayland && t.wayland.appId ? t.wayland.appId : "");
-            out.push({
-                address: Dock.hex(t.address),
-                cls: cls,
-                title: t.title || (ipc && ipc.title ? ipc.title : ""),
-                workspace: t.workspace ? t.workspace.name : "",
-                workspaceId: t.workspace ? Number(t.workspace.id || 0) : 0,
-                monitor: t.workspace && t.workspace.monitor ? t.workspace.monitor.name : ""
-            });
-        }
-        return out;
-    }
+    readonly property var windows: AppSession.windows;
 
     /** Hyprland workspaces, including monitor names, as plain data for the selector. */
     readonly property var workspaces: {
@@ -60,36 +39,12 @@ QtObject {
     }
 
     function desktopFor(app) {
-        if (!app || AppLauncher.effectiveRunnerFor(app) !== "native")
-            return null;
-        var entries = DesktopEntries.applications.values || [];
-        for (var i = 0; i < entries.length; ++i) {
-            var e = entries[i];
-            if (e && !e.noDisplay && e.id &&
-                    ((app.desktopEntryId && String(e.id) === String(app.desktopEntryId))
-                     || String(e.id) === String(app.id)))
-                return e;
-        }
-        var wanted = String(app.name || "").toLowerCase();
-        for (var j = 0; j < entries.length; ++j) {
-            var e2 = entries[j];
-            if (e2 && !e2.noDisplay && wanted.length > 0 && String(e2.name || "").toLowerCase() === wanted)
-                return e2;
-        }
-        return null;
+        return AppSession.desktopFor(app);
     }
 
-    /** Windows belonging to the app, if any are currently managed by Hyprland. */
+    /** Shared window identity is used by Blades and Apps/detail. */
     function windowsFor(app) {
-        if (!app)
-            return [];
-        var entry = root.desktopFor(app);
-        var out = [];
-        var src = root.windows;
-        for (var i = 0; i < src.length; ++i)
-            if (Blades.matchesWindow(app, src[i], entry))
-                out.push(src[i]);
-        return out;
+        return AppSession.windowsFor(app);
     }
 
     /** Every game, including a folder that still needs a launch target, gets a blade. */
@@ -120,27 +75,7 @@ QtObject {
 
     function stateFor(index) {
         var app = root.appAt(index);
-        if (!app)
-            return "idle";
-        if (app.id in BladeSession.stoppingIds)
-            return "stopping";
-        if (app.id in BladeSession.failedIds)
-            return "failed";
-        if (root.windowsFor(app).length > 0)
-            return "running";
-        if (app.folderMissing)
-            return "missing";
-        if (app.needsSetup || !AppLauncher.hasLaunchTarget(app))
-            return "setup";
-        if (AppLauncher.isPending(app.id))
-            return "preparing";
-        if (app.id in BladeSession.launchTargets)
-            return "launching";
-        if (app.id in BladeSession.queuedIds)
-            return "waiting";
-        if (AppLauncher.isRunning(app.id))
-            return "launching";
-        return "idle";
+        return app ? AppSession.stateFor(app.id) : "idle";
     }
 
     function labelFor(index) {
@@ -237,7 +172,7 @@ QtObject {
         // Prefix setup may take several seconds. Keep the workspace reserved
         // but don't focus it until the setup callback, then re-check occupancy
         // immediately before the game process starts.
-        if (!AppLauncher.launch(app.id, true, function() {
+        if (!AppSession.launch(app.id, true, function() {
             Hyprland.refreshWorkspaces();
             Hyprland.refreshToplevels();
             var now = root.windows;
@@ -318,23 +253,15 @@ QtObject {
             if (app.needsSetup || targetStatus.requiresExecutable)
                 root.configure(index);
             else
-                AppLauncher.launch(app.id, true);
+                AppSession.launch(app.id, true);
             return;
         }
 
-        // Existing windows are navigation targets, never a reason to spawn a duplicate.
-        var existing = root.windowsFor(app);
-        if (existing.length > 0) {
-            var active = Hyprland.activeToplevel;
-            var activeAddress = active && active.address ? Dock.hex(active.address) : "";
-            var target = Blades.nextWindow(existing, activeAddress);
-            if (target)
-                Dock.focusWindow(target, root.screenName);
-            BladeSession.failedIds = root.clearObjectKey(BladeSession.failedIds, app.id);
+        // The shared coordinator focuses/cycles live windows before considering a launch.
+        if (AppSession.activateExisting(app.id, root.screenName))
             return;
-        }
 
-        if (app.id in BladeSession.queuedIds || app.id in BladeSession.launchTargets || AppLauncher.isRunning(app.id))
+        if (AppSession.isBusy(app.id))
             return;
 
         BladeSession.failedIds = root.clearObjectKey(BladeSession.failedIds, app.id);
